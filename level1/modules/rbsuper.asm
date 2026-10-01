@@ -96,7 +96,7 @@ start               lbra      Init
 *
 Term                leau      UOFFSET,u
 * Free memory allocated for cache
-                    lda       V.CchSize,u         get cache size into A
+                    ldd       V.CchSize,u         get cache size into D
 * Note, the next line fixes a bug where the system would crash when F$Link in Init failed.
 * If it fails, V.CchSize will never get set, and since it is set to 0 initally, we assume
 * that init failed if V.CchSize is 0 and thus we simply return.
