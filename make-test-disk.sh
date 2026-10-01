@@ -92,6 +92,7 @@ install_sys_contents() {
 
     python3 "$ROOT/make-sys-files.py" \
         --sysdir "$ROOT/level1/sys" \
+        --help-overlay "$ROOT/level1/fm11/sys" \
         --outdir "$sys_tmp" "$@"
 
     os9 makdir "$rbf,SYS"

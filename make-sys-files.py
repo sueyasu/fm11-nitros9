@@ -13,17 +13,23 @@ def cr_text(data: bytes) -> bytes:
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--sysdir", required=True)
+    p.add_argument("--help-overlay")
     p.add_argument("--outdir", required=True)
     p.add_argument("commands", nargs="+")
     ns = p.parse_args()
 
     sysdir = Path(ns.sysdir)
+    help_overlay = Path(ns.help_overlay) if ns.help_overlay else None
     outdir = Path(ns.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
     help_parts: list[bytes] = []
     for cmd in ns.commands:
         hp = sysdir / f"{cmd.lower()}.hp"
+        if help_overlay is not None:
+            overlay_hp = help_overlay / f"{cmd.lower()}.hp"
+            if overlay_hp.is_file():
+                hp = overlay_hp
         if not hp.is_file():
             # Some upstream commands have no .hp source. They remain usable,
             # but are omitted from /SYS/helpmsg rather than aborting image creation.
