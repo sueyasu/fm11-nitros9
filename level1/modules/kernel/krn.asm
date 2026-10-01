@@ -88,6 +88,13 @@ name                fcs       /Krn/
 *     Y = The size of the bootfile in bytes.
 OS9Cold             equ       *         ; define assembler symbol
                     orcc      #IntMasks ; mask interrupts
+                  IFNE    H6309
+* NitrOS-9/6309 Level 1 runs the processor in native mode.  Do this
+* before creating any interrupt/SWI register frames; defs/os9.d selects
+* the matching 6309 R$ layout when H6309 is set.  Reset always enters
+* 6309 emulation mode, so LDMD is the first 6309-specific operation here.
+                    ldmd      #$01      ; enable HD6309 native mode
+                  ENDC
                     lds       #$500     ; set the system stack
                   IFNE    wildbits ; begin conditional assembly for wildbits
 *[[[ Wildbits port
