@@ -67,18 +67,26 @@ BannLen             equ       *-Banner
 
                     ifeq      ROM
 DefDev              equ       *
+                  IFNE    fm11
+                    fcc       "/DD"
+                  ELSE
                     ifne      DD
                     fcc       "/DD"
                     else
                     fcc       "/H0"
                     endc
+                  ENDC
                     fcb       C$CR
 HDDev               equ       *
+                  IFNE    fm11
+                    fcc       "/DD/"
+                  ELSE
                     ifne      DD
                     fcc       "/DD/"
                     else
                     fcc       "/H0/"
                     endc
+                  ENDC
 ExecDir             fcc       "CMDS"
                     fcb       C$CR
                     endc
@@ -117,7 +125,7 @@ ShellPL             equ       *-ShellPrm
 * If no RTC is available, then the soft clock starts at January 1 of the new year.
 DefTime             fcb       85,12,31,23,59,59
 
-                  IFEQ    atari+corsham+wildbits+picothing
+                  IFEQ    atari+corsham+wildbits+picothing+fm11
                     ifeq      Level-1
 * BASIC reset code (CoCo port only)
 BasicRst            fcb       $55
@@ -193,6 +201,12 @@ SignOn
 * Set default time
                     leax      >DefTime,pcr
                     os9       F$STime             set time to default
+
+* FM-11 RAM bring-up has no RBF/default disk yet.
+                  IFNE    FM11RAM
+                    bra       L0125
+                  ENDC
+
                     ifeq      ROM
 * Change EXEC and DATA dirs
                     leax      >ExecDir,pcr
@@ -210,7 +224,7 @@ SignOn
 
 L0125               equ       *
                     pshs      u,y
-                  IFEQ    atari+corsham+wildbits+picothing
+                  IFEQ    atari+corsham+wildbits+picothing+fm11
                     ifeq      Level-1
 * Setup BASIC code (CoCo port only)
                     leax      >BasicRst,pcr
@@ -247,9 +261,14 @@ L0151               lda       b,y
                     endc
                     endc
 
+* Diskless FM-11 bring-up: resident Shell is in OS9Boot.
+                  IFNE    FM11RAM
+                    bra       L0186
+                  ENDC
+
                     ifeq      ROM
 * Fork shell startup here
-                  IFEQ    atari+corsham+wildbits+picothing
+                  IFEQ    atari+corsham+wildbits+picothing+fm11
 * Added 12/14/03: If SHIFT is held down, startup is not run (CoCo only)
                     lda       #$01                standard output
                     ldb       #SS.KySns
