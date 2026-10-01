@@ -30,3 +30,9 @@ helpmsg
 
 # usim09pt FRAM persistence file (emulator artifact, holds reset vector)
 picothing.fram
+
+/fm11-system-*.d88
+/fm11-system-*.rbf
+/level1/fm11/build-minimal-*/
+/build-*.log
+
