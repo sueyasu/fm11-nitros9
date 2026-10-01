@@ -51,7 +51,7 @@ DOHELP              set       1
 tylg                set       Prgrm+Objct
 atrv                set       ReEnt+rev
 rev                 set       $00
-edition             set       9
+edition             set       13
 
                     mod       eom,name,tylg,atrv,start,size
 
@@ -77,6 +77,10 @@ u008F               rmb       7
 u0096               rmb       232
 eflag               rmb       1
 bootloc             rmb       3
+                    ifne      fm11
+FMAssetPath         rmb       1
+FMFileBuf           rmb       4352                17 x 256-byte Bootp1 image
+                    endc
                     ifgt      Level-1
 u057E               rmb       76
 u05CA               rmb       8316
@@ -102,6 +106,24 @@ HelpMsg             fcb       C$LF
                     endc
 WritErr             fcb       C$LF
                     fcc       "Error writing kernel track"
+                    fcb       C$CR
+FMResetErr          fcb       C$LF
+                    fcc       "Error resetting boot drive"
+                    fcb       C$CR
+FMIPLErr            fcb       C$LF
+                    fcc       "Error writing IPL sectors"
+                    fcb       C$CR
+FMIPLNoRecErr       fcb       C$LF
+                    fcc       "Error writing IPL sectors: Record Not Found"
+                    fcb       C$CR
+FMIPLNotReadyErr    fcb       C$LF
+                    fcc       "Error writing IPL sectors: drive not ready"
+                    fcb       C$CR
+FMIPLDMAErrMsg      fcb       C$LF
+                    fcc       "Error writing IPL sectors: DMA error"
+                    fcb       C$CR
+FMIPLDMAWaitMsg     fcb       C$LF
+                    fcc       "Error writing IPL sectors: DMA incomplete"
                     fcb       C$CR
                     fcb       C$LF
                     fcc       "Error - cannot gen to hard disk"
@@ -142,6 +164,26 @@ BootName            fcc       "OS9Boot "
                     fcb       $FF
 RelNam              fcc       "Rel"
                     fcb       $FF
+                    ifne      fm11
+FMTypeErr           fcb       C$LF
+                    fcc       "Error - unsupported FM-11 target geometry"
+                    fcb       C$CR
+FMAssetErr          fcb       C$LF
+                    fcc       "Error reading FM-11 IPL/Bootp1 file from /DD/SYS"
+                    fcb       C$CR
+FMIPL2DName         fcc       "/DD/SYS/IPL/IPL.2D"
+                    fcb       C$CR
+FMIPL2HDName        fcc       "/DD/SYS/IPL/IPL.2HD"
+                    fcb       C$CR
+FMBoot2DName        fcc       "/DD/SYS/BOOT/Bootp1.2D"
+                    fcb       C$CR
+FMBoot2HDName       fcc       "/DD/SYS/BOOT/Bootp1.2HD"
+                    fcb       C$CR
+FMIPLHDName          fcc       "/DD/SYS/IPL/IPL.HD"
+                    fcb       C$CR
+FMBootHDName         fcc       "/DD/SYS/BOOT/Bootp1.HD"
+                    fcb       C$CR
+                    endc
 * This might happen if there is not enough memory present.
 MemSpace            fcc       "There is not enough memory for buffer space"
                     fcb       C$CR
@@ -191,6 +233,76 @@ L013C               sta       ,y+
                     os9       I$Open
                     sta       <devpath            Save pathnumber
                     lbcs      ShowHelp            Error opening dev, show help + exit
+
+                    ifne      fm11
+* Save target-device geometry now. pathopts is later reused for the
+* newly-created OS9Boot file, so it cannot be used for media comparison.
+                    leax      <pathopts,u
+                    clrb                          SS.Opt
+                    lda       <devpath
+                    os9       I$GetStt
+                    lbcs      Bye
+                    ldd       <pathopts+(PD.CYL-PD.OPT),u
+                    std       <u0034,u            target cylinders
+                    ldd       <pathopts+(PD.SCT-PD.OPT),u
+                    std       <u0034+2,u          target sectors/track
+                    lda       <pathopts+(PD.SID-PD.OPT),u
+                    sta       <u0034+10,u         target heads
+                    clr       <u0034+12,u         0=2D,1=2HD,2=HDD
+                    lda       <pathopts+(PD.TYP-PD.OPT),u
+                    bita      #TYP.HARD
+                    bne       FMGeomHD
+                    ldd       <u0034,u
+                    cmpd      #40
+                    lbeq      FMGeom2D
+                    cmpd      #77
+                    lbne      FMTypeBad
+                    ldd       <u0034+2,u
+                    cmpd      #26
+                    lbne      FMTypeBad
+                    inc       <u0034+12,u
+                    bra       FMGeomOK
+FMGeom2D            ldd       <u0034+2,u
+                    cmpd      #16
+                    lbne      FMTypeBad
+                    bra       FMGeomOK
+FMGeomHD            ldd       <u0034+2,u
+                    cmpd      #32
+                    lbne      FMTypeBad
+                    ldd       <u0034,u
+                    cmpd      #157
+                    lbeq      FMGeomHD157
+                    cmpd      #315
+                    lbeq      FMGeomHD315
+                    cmpd      #747
+                    lbne      FMTypeBad
+                    lda       <u0034+10,u
+                    cmpa      #4
+                    lbeq      FMGeomHDOK
+                    cmpa      #7
+                    lbeq      FMGeomHDOK
+                    cmpa      #11
+                    lbne      FMTypeBad
+                    lbra      FMGeomHDOK
+FMGeomHD157         lda       <u0034+10,u
+                    cmpa      #4
+                    lbeq      FMGeomHDOK
+                    cmpa      #6
+                    lbne      FMTypeBad
+                    lbra      FMGeomHDOK
+FMGeomHD315         lda       <u0034+10,u
+                    cmpa      #2
+                    lbeq      FMGeomHDOK
+                    cmpa      #4
+                    lbeq      FMGeomHDOK
+                    cmpa      #6
+                    lbeq      FMGeomHDOK
+                    cmpa      #8
+                    lbne      FMTypeBad
+FMGeomHDOK          lda       #2
+                    sta       <u0034+12,u
+FMGeomOK            equ       *
+                    endc
 
                     ldx       <EndDevName         Get pointer to end of dev name
                     leay      >BootName,pcr       Get pointer to boot file name
@@ -304,7 +416,14 @@ L0203               pshs      y
 
                     else
 
-* OS-9 Level One: Write out bootfile
+* OS-9 Level One: Write out bootfile.
+                    ifne      fm11
+* FM-11 may generate a target profile different from the currently booted
+* profile.  Copy the resident bootfile module-by-module and substitute only
+* D0/D1/D2/D3/DD with the target-specific descriptor modules.
+                    lbsr      FMWriteBootFile
+                    lbcs      Bye
+                    else
                     ldd       >D.BTHI             get bootfile size
                     subd      >D.BTLO
                     tfr       d,y                 in D, tfr to Y
@@ -313,6 +432,7 @@ L0203               pshs      y
                     lda       <newbpath
                     os9       I$Write             write out boot to file
                     lbcs      Bye
+                    endc
 
                     endc
 
@@ -371,6 +491,298 @@ notfragd            equ       *
 sendit              equ       *
                     lbsr      WriteLSN0           Write bootfile loc to LSN0 on disk
 
+                    ifne      fm11
+* FM-11: cylinder 0 is reserved outside the RBF bitmap.  The target
+* descriptor, not /DD, selects the media profile.  This permits a 2D
+* system to build 2HD media and vice versa.
+                    lda       <devpath
+                    ldb       #SS.Reset
+                    os9       I$SetStt
+                    lbcs      FMResetBad
+
+                    lda       <u0034+12,u
+                    cmpa      #2
+                    beq       FMCobTargetHD
+                    ldd       <u0034,u            target cylinders: 40=2D, 77=2HD
+                    cmpd      #40
+                    beq       FMCobTarget2D
+                    cmpd      #77
+                    lbne      FMTypeBad
+                    ldd       <u0034+2,u
+                    cmpd      #26
+                    lbne      FMTypeBad
+                    leax      >FMIPL2HDName,pcr
+                    leay      >FMBoot2HDName,pcr
+                    sty       <u0034+8,u
+                    bra       FMCobWriteIPL
+FMCobTargetHD       leax      >FMIPLHDName,pcr
+                    leay      >FMBootHDName,pcr
+                    sty       <u0034+8,u
+                    ldy       #512
+                    lbsr      FMReadAsset
+                    lbcs      FMAssetBad
+                    lda       <devpath
+                    ldb       #SS.FM11HDIPL
+                    os9       I$SetStt
+                    lbcs      FMIPLBad
+                    ldx       <u0034+8,u
+                    ldy       #4352
+                    lbsr      FMReadAsset
+                    lbcs      FMAssetBad
+                    lda       <devpath
+                    ldb       #SS.FM11HDBoot
+                    os9       I$SetStt
+                    lbcs      WriteBad
+                    bra       FMCobClose
+FMCobTarget2D       ldd       <u0034+2,u
+                    cmpd      #16
+                    lbne      FMTypeBad
+                    leax      >FMIPL2DName,pcr
+                    leay      >FMBoot2DName,pcr
+                    sty       <u0034+8,u
+FMCobWriteIPL       ldy       #1024
+                    lbsr      FMReadAsset
+                    lbcs      FMAssetBad
+                    lda       <devpath
+                    ldb       #SS.FM11IPL
+                    os9       I$SetStt
+                    lbcs      FMIPLBad
+
+                    ldx       <u0034+8,u          matching /DD/SYS/BOOT pathname
+                    ldy       #4352               17 physical 256-byte sectors
+                    lbsr      FMReadAsset
+                    lbcs      FMAssetBad
+                    lda       <devpath
+                    ldb       #SS.FM11Boot
+                    os9       I$SetStt
+                    lbcs      WriteBad
+FMCobClose          lda       <devpath
+                    os9       I$Close
+                    lbcs      Bye
+
+* FM-11: all target writes are complete and the target path is closed.
+* RBSuper Term now returns its cache with the correct 16-bit size, so there is
+* no need to force an external RESET after a successful Cobbler operation.
+                    clrb
+                    lbra      Bye
+
+FMTypeBad           leax      >FMTypeErr,pcr
+                    clrb
+                    lbra      DisplayErrorAndExit
+FMAssetBad          leax      >FMAssetErr,pcr
+                    lbra      DisplayErrorAndExit
+
+FMResetBad          leax      >FMResetErr,pcr
+                    clrb
+                    lbra      DisplayErrorAndExit
+FMIPLBad            cmpb      #$10                FDC Record Not Found
+                    beq       FMIPLNoRecord
+                    cmpb      #$80                FDC Not Ready
+                    beq       FMIPLNotReady
+                    cmpb      #$01                llfm11 diagnostic: DMA error
+                    beq       FMIPLDMAErr
+                    cmpb      #$02                llfm11 diagnostic: DMA incomplete
+                    beq       FMIPLDMAWait
+                    leax      >FMIPLErr,pcr
+                    clrb
+                    lbra      DisplayErrorAndExit
+FMIPLNoRecord       leax      >FMIPLNoRecErr,pcr
+                    clrb
+                    lbra      DisplayErrorAndExit
+FMIPLNotReady       leax      >FMIPLNotReadyErr,pcr
+                    clrb
+                    lbra      DisplayErrorAndExit
+FMIPLDMAErr         leax      >FMIPLDMAErrMsg,pcr
+                    clrb
+                    lbra      DisplayErrorAndExit
+FMIPLDMAWait        leax      >FMIPLDMAWaitMsg,pcr
+                    clrb
+                    lbra      DisplayErrorAndExit
+
+********************************************************************
+* FMWriteBootFile
+*
+* Level 1 keeps the resident OS9Boot image between D.BTLO and D.BTHI.
+* Copy it module by module, replacing only the five logical floppy
+* descriptors with the versions required by the target media profile.
+* This preserves the running system's kernel/managers/drivers while making
+* /D0-/D3 and /DD correct for a 2D or 2HD target independently of /DD.
+********************************************************************
+FMWriteBootFile     ldx       >D.BTLO
+                    stx       <u0034+4,u          current source module
+                    ldx       >D.BTHI
+                    stx       <u0034+6,u          end of resident bootfile
+                    clra
+                    clrb
+                    std       <DD.BSZ
+FMWBLoop            ldx       <u0034+4,u
+                    cmpx      <u0034+6,u
+                    lbhs      FMWBDone
+                    ldd       M$Size,x
+                    leay      d,x
+                    sty       <u0034+4,u          next resident module
+                    lbsr      FMSelectDesc
+                    ldy       M$Size,x
+                    pshs      y
+                    lda       <newbpath
+                    os9       I$Write
+                    puls      y
+                    lbcs      FMWBExit
+                    tfr       y,d
+                    addd      <DD.BSZ
+                    std       <DD.BSZ
+                    lbra      FMWBLoop
+FMWBDone            clrb
+                    andcc     #^Carry
+FMWBExit            rts
+
+* Input X = resident module.  Return X = module to write.
+* Exact FM-11 boot descriptors D0/D1/D2/D3/DD/H0 are replaced for the target media.
+FMSelectDesc        pshs      d,y
+                    ldd       M$Name,x
+                    leay      d,x
+                    lda       ,y
+                    cmpa      #$44                'D'
+                    beq       FMSelNameD
+                    cmpa      #$48                'H'
+                    lbne      FMSelDone
+                    lda       1,y
+                    cmpa      #$B0                '0' with FCS high bit
+                    lbeq      FMSelH0
+                    lbra      FMSelDone
+FMSelNameD          lda       1,y
+                    cmpa      #$B0                '0' with FCS high bit
+                    lbeq      FMSelD0
+                    cmpa      #$B1
+                    lbeq      FMSelD1
+                    cmpa      #$B2
+                    lbeq      FMSelD2
+                    cmpa      #$B3
+                    lbeq      FMSelD3
+                    cmpa      #$C4                'D' with FCS high bit
+                    lbeq      FMSelDD
+                    lbra      FMSelDone
+
+FMSelH0             lda       <u0034+12,u
+                    cmpa      #2
+                    lbne      FMSelDone
+                    ldd       <u0034,u
+                    cmpd      #157
+                    lbeq      FMSelH0_157
+                    cmpd      #315
+                    lbeq      FMSelH0_315
+                    leax      >FM11H0_M2241,pcr
+                    lda       <u0034+10,u
+                    cmpa      #4
+                    lbeq      FMSelDone
+                    leax      >FM11H0_M2242,pcr
+                    cmpa      #7
+                    lbeq      FMSelDone
+                    leax      >FM11H0_M2243,pcr
+                    lbra      FMSelDone
+FMSelH0_157         leax      >FM11H0_M2231,pcr
+                    lda       <u0034+10,u
+                    cmpa      #4
+                    lbeq      FMSelDone
+                    leax      >FM11H0_M2232,pcr
+                    lbra      FMSelDone
+FMSelH0_315         leax      >FM11H0_M2230,pcr
+                    lda       <u0034+10,u
+                    cmpa      #2
+                    lbeq      FMSelDone
+                    leax      >FM11H0_M2233,pcr
+                    cmpa      #4
+                    lbeq      FMSelDone
+                    leax      >FM11H0_M2234,pcr
+                    cmpa      #6
+                    lbeq      FMSelDone
+                    leax      >FM11H0_M2235,pcr
+                    lbra      FMSelDone
+
+FMSelD0             lda       <u0034+12,u
+                    cmpa      #2
+                    lbeq      FMSelDone
+                    ldd       <u0034,u
+                    cmpd      #40
+                    lbeq      FMSelD0_2D
+                    leax      >FM11D0_2HD,pcr
+                    lbra      FMSelDone
+FMSelD0_2D          leax      >FM11D0_2D,pcr
+                    lbra      FMSelDone
+FMSelD1             lda       <u0034+12,u
+                    cmpa      #2
+                    lbeq      FMSelDone
+                    ldd       <u0034,u
+                    cmpd      #40
+                    lbeq      FMSelD1_2D
+                    leax      >FM11D1_2HD,pcr
+                    lbra      FMSelDone
+FMSelD1_2D          leax      >FM11D1_2D,pcr
+                    lbra      FMSelDone
+FMSelD2             lda       <u0034+12,u
+                    cmpa      #2
+                    lbeq      FMSelDone
+                    ldd       <u0034,u
+                    cmpd      #40
+                    lbeq      FMSelD2_2D
+                    leax      >FM11D2_2HD,pcr
+                    lbra      FMSelDone
+FMSelD2_2D          leax      >FM11D2_2D,pcr
+                    lbra      FMSelDone
+FMSelD3             lda       <u0034+12,u
+                    cmpa      #2
+                    lbeq      FMSelDone
+                    ldd       <u0034,u
+                    cmpd      #40
+                    lbeq      FMSelD3_2D
+                    leax      >FM11D3_2HD,pcr
+                    lbra      FMSelDone
+FMSelD3_2D          leax      >FM11D3_2D,pcr
+                    lbra      FMSelDone
+FMSelDD             lda       <u0034+12,u
+                    cmpa      #2
+                    lbeq      FMSelDD_HD
+                    ldd       <u0034,u
+                    cmpd      #40
+                    lbeq      FMSelDD_2D
+                    leax      >FM11DD_2HD,pcr
+                    lbra      FMSelDone
+FMSelDD_HD          ldd       <u0034,u
+                    cmpd      #157
+                    lbeq      FMSelDD_157
+                    cmpd      #315
+                    lbeq      FMSelDD_315
+                    leax      >FM11DD_M2241,pcr
+                    lda       <u0034+10,u
+                    cmpa      #4
+                    lbeq      FMSelDone
+                    leax      >FM11DD_M2242,pcr
+                    cmpa      #7
+                    lbeq      FMSelDone
+                    leax      >FM11DD_M2243,pcr
+                    lbra      FMSelDone
+FMSelDD_157         leax      >FM11DD_M2231,pcr
+                    lda       <u0034+10,u
+                    cmpa      #4
+                    lbeq      FMSelDone
+                    leax      >FM11DD_M2232,pcr
+                    lbra      FMSelDone
+FMSelDD_315         leax      >FM11DD_M2230,pcr
+                    lda       <u0034+10,u
+                    cmpa      #2
+                    lbeq      FMSelDone
+                    leax      >FM11DD_M2233,pcr
+                    cmpa      #4
+                    lbeq      FMSelDone
+                    leax      >FM11DD_M2234,pcr
+                    cmpa      #6
+                    lbeq      FMSelDone
+                    leax      >FM11DD_M2235,pcr
+                    lbra      FMSelDone
+FMSelDD_2D          leax      >FM11DD_2D,pcr
+FMSelDone           puls      d,y,pc
+
+                    else
                     ldd       #$0001
                     lbsr      Seek2LSN
                     leax      >bitmbuf,u          Point to bitmap buffer
@@ -486,6 +898,7 @@ RewriteBitmap
                     lbcs      Bye                 Error : exit
                     clrb                          Flag no error
                     lbra      Bye
+                    endc
 
 * Get absolute LSN
 * regA=track, regB=sector
@@ -555,7 +968,7 @@ BitTable            fcb       $80,$40,$20,$10,$08,$04,$02,$01 Bitmap bit table
 * Exit: regY=divisor, regD=LSN
 Initcalc            bsr       AbsLSN              go get absolute LSN in D
                     leax      >bitmbuf,u          point X to our bitmap buffer
-                    bsr       GetBitmapBit        regA is bit from table
+                    lbsr      GetBitmapBit        regA is bit from table
 * New code to obtain a shift value R.G.
                     pshs      d,y
                     ldy       btshift,u
@@ -588,7 +1001,7 @@ CAnz                tfr       d,y                 regY has been divided by DD.BI
 * I think regY needs to be divided by DD.BIT R.G.
 CheckAlloc
                     pshs      y,x,b,a
-                    bsr       Initcalc
+                    lbsr      Initcalc
 * Back to older code
                     sta       ,-s                 save off
                     bmi       L03CB
@@ -743,7 +1156,7 @@ WriteBad            leax      >WritErr,pcr
                     bra       DisplayErrorAndExit
 SeekBad             leax      SeekErr,pcr
                     clrb
-                    bsr       DisplayErrorAndExit
+                    lbsr      DisplayErrorAndExit
 TrkAlloc            leax      >FileWarn,pcr
                     clrb
                     bra       DisplayErrorAndExit
@@ -755,6 +1168,103 @@ NoMem               leax      >MemSpace,pcr
                     ifgt      Level-1
 NoRel               leax      >RelMsg,pcr
                     bra       DisplayErrorAndExit
+                    endc
+
+                    ifne      fm11
+********************************************************************
+* FMReadAsset - read an external FM-11 IPL/Bootp1 file into FMFileBuf.
+* Entry: X = CR-terminated pathname, Y = requested byte count.
+* Exit:  X = FMFileBuf, C clear on success; B = OS-9 error on failure.
+********************************************************************
+FMReadAsset         pshs      y
+                    lda       #READ.
+                    os9       I$Open
+                    bcs       FMRAOpenFail
+                    sta       >FMAssetPath,u
+                    leax      >FMFileBuf,u
+                    puls      y
+                    os9       I$Read
+                    bcs       FMRAReadFail
+                    lda       >FMAssetPath,u
+                    os9       I$Close
+                    bcs       FMRAExit
+                    leax      >FMFileBuf,u
+                    clrb
+                    andcc     #^Carry
+FMRAExit            rts
+FMRAOpenFail        leas      2,s
+                    orcc      #Carry
+                    rts
+FMRAReadFail        pshs      b
+                    lda       >FMAssetPath,u
+                    os9       I$Close
+                    puls      b
+                    orcc      #Carry
+                    rts
+                    endc
+
+********************************************************************
+* FM-11 target-profile descriptor data embedded by build-minimal.sh.
+* IPL and Bootp1 data are external files under /DD/SYS.  Cobbler retains
+* only the logical descriptors needed to generate a target-profile OS9Boot.
+********************************************************************
+                    ifne      fm11
+FM11D0_2D
+                    use       cobbler-d0-2d.asm
+FM11D1_2D
+                    use       cobbler-d1-2d.asm
+FM11D2_2D
+                    use       cobbler-d2-2d.asm
+FM11D3_2D
+                    use       cobbler-d3-2d.asm
+FM11DD_2D
+                    use       cobbler-dd-2d.asm
+FM11D0_2HD
+                    use       cobbler-d0-2hd.asm
+FM11D1_2HD
+                    use       cobbler-d1-2hd.asm
+FM11D2_2HD
+                    use       cobbler-d2-2hd.asm
+FM11D3_2HD
+                    use       cobbler-d3-2hd.asm
+FM11DD_2HD
+                    use       cobbler-dd-2hd.asm
+FM11H0_M2231
+                    use       cobbler-h0-m2231b.asm
+FM11DD_M2231
+                    use       cobbler-dd-m2231b.asm
+FM11H0_M2230
+                    use       cobbler-h0-m2230b.asm
+FM11DD_M2230
+                    use       cobbler-dd-m2230b.asm
+FM11H0_M2232
+                    use       cobbler-h0-m2232b.asm
+FM11DD_M2232
+                    use       cobbler-dd-m2232b.asm
+FM11H0_M2233
+                    use       cobbler-h0-m2233b.asm
+FM11DD_M2233
+                    use       cobbler-dd-m2233b.asm
+FM11H0_M2234
+                    use       cobbler-h0-m2234b.asm
+FM11DD_M2234
+                    use       cobbler-dd-m2234b.asm
+FM11H0_M2235
+                    use       cobbler-h0-m2235b.asm
+FM11DD_M2235
+                    use       cobbler-dd-m2235b.asm
+FM11H0_M2241
+                    use       cobbler-h0-m2241b.asm
+FM11DD_M2241
+                    use       cobbler-dd-m2241b.asm
+FM11H0_M2242
+                    use       cobbler-h0-m2242b.asm
+FM11DD_M2242
+                    use       cobbler-dd-m2242b.asm
+FM11H0_M2243
+                    use       cobbler-h0-m2243b.asm
+FM11DD_M2243
+                    use       cobbler-dd-m2243b.asm
                     endc
 
                     emod

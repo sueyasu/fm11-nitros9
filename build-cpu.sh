@@ -225,10 +225,12 @@ for src in $BUILDABLE_CMDS; do
 done
 
 # FM-11-specific command variants.
-cp "$FM/cmds/format.asm" "$OUT/format.asm"
-cp "$FM/cmds/ded.asm"    "$OUT/ded.asm"
-cp "$FM/cmds/minted.asm" "$OUT/minted.asm"
-cp "$FM/cmds/more.asm"   "$OUT/more.asm"
+cp "$FM/cmds/format.asm"  "$OUT/format.asm"
+cp "$FM/cmds/cobbler.asm" "$OUT/cobbler.asm"
+cp "$FM/cmds/os9gen.asm"  "$OUT/os9gen.asm"
+cp "$FM/cmds/ded.asm"     "$OUT/ded.asm"
+cp "$FM/cmds/minted.asm"  "$OUT/minted.asm"
+cp "$FM/cmds/more.asm"    "$OUT/more.asm"
 (
     cd "$OUT"
     # shellcheck disable=SC2086

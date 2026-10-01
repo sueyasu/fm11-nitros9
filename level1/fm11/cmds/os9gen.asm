@@ -63,7 +63,7 @@ DOHD                set       1                   allow bootfile creation on HD
 tylg                set       Prgrm+Objct
 atrv                set       ReEnt+rev
 rev                 set       $00
-edition             set       12
+edition             set       13
 
                     mod       eom,name,tylg,atrv,start,size
 
@@ -106,6 +106,13 @@ u048E               rmb       1
 u048F               rmb       7
 u0496               rmb       7018
 
+* FM-11 private variables live after all original OS9Gen statics so that the
+* legacy direct-indexed offsets remain unchanged.
+fmgeom              rmb       4                   FM-11 target cylinders/sectors per track
+fmbtptr             rmb       2                   FM-11 selected Bootp1 pathname
+fmassetpath         rmb       1                   open path for external IPL/Bootp1
+fmkind              rmb       1                   0=2D, 1=2HD, 2=HDD
+
 bitmbuf             equ       .
 size                equ       .
 
@@ -134,6 +141,38 @@ ErrWrit             fcb       C$LF
 MemErr              fcb       C$LF
                     fcc       "Not enough memory for bit map"
                     fcb       C$CR
+                    ifne      fm11
+FMTypeErr           fcb       C$LF
+                    fcc       "FM-11: unsupported target geometry"
+                    fcb       C$CR
+FMTOptErr           fcb       C$LF
+                    fcc       "FM-11: -t override is not supported; /DD/SYS boot files are used"
+                    fcb       C$CR
+FMResetErr          fcb       C$LF
+                    fcc       "FM-11: controller reset failed"
+                    fcb       C$CR
+FMIPLErr            fcb       C$LF
+                    fcc       "FM-11: IPL write failed"
+                    fcb       C$CR
+FMBootErr           fcb       C$LF
+                    fcc       "FM-11: Bootp1 write failed"
+                    fcb       C$CR
+FMAssetErr          fcb       C$LF
+                    fcc       "FM-11: cannot read IPL/Bootp1 from /DD/SYS"
+                    fcb       C$CR
+FMIPL2DName         fcc       "/DD/SYS/IPL/IPL.2D"
+                    fcb       C$CR
+FMIPL2HDName        fcc       "/DD/SYS/IPL/IPL.2HD"
+                    fcb       C$CR
+FMBoot2DName        fcc       "/DD/SYS/BOOT/Bootp1.2D"
+                    fcb       C$CR
+FMBoot2HDName       fcc       "/DD/SYS/BOOT/Bootp1.2HD"
+                    fcb       C$CR
+FMIPLHDName          fcc       "/DD/SYS/IPL/IPL.HD"
+                    fcb       C$CR
+FMBootHDName         fcc       "/DD/SYS/BOOT/Bootp1.HD"
+                    fcb       C$CR
+                    endc
 TrkErr              fcb       C$LF
                     fcc       "Can't read data"
                     fcb       C$CR
@@ -205,6 +244,9 @@ start               clrb
                     stb       <u0005
                     stb       <sngldrv            assume multi-drive
                     stb       <eflag              assume not extended bootfile
+                    ifne      fm11
+                    inc       <eflag              FM-11 always uses extended/fragmented boot
+                    endc
                     stu       <statptr            save statics pointer
                     leas      >u047E,u            point stack pointer to u047e
                     pshs      u
@@ -292,6 +334,40 @@ L0239               sta       ,y+
 *         ldb   #SS.Opt
                     os9       I$GetStt
                     lbcs      Bye
+
+                    ifne      fm11
+* Save the target geometry before devopts is reused for the new OS9Boot.
+* FM-11 has two supported floppy profiles: 40x2x16 (2D) and 77x2x26 (2HD).
+                    ldd       <devopts+(PD.CYL-PD.OPT),u
+                    std       >fmgeom,u
+                    ldd       <devopts+(PD.SCT-PD.OPT),u
+                    std       >fmgeom+2,u
+                    clr       >fmkind,u
+                    lda       <devopts+(PD.TYP-PD.OPT),u
+                    bita      #TYP.HARD
+                    bne       FMGeomHD
+                    ldd       >fmgeom,u
+                    cmpd      #40
+                    beq       FMGeom2D
+                    cmpd      #77
+                    lbne      FMTypeBad
+                    ldd       >fmgeom+2,u
+                    cmpd      #26
+                    lbne      FMTypeBad
+                    inc       >fmkind,u
+                    bra       FMGeomOK
+FMGeom2D            ldd       >fmgeom+2,u
+                    cmpd      #16
+                    lbne      FMTypeBad
+                    bra       FMGeomOK
+FMGeomHD            ldd       >fmgeom+2,u
+                    cmpd      #32
+                    lbne      FMTypeBad
+                    lda       #2
+                    sta       >fmkind,u
+FMGeomOK            tst       <btflag
+                    lbne      FMTOptBad
+                    endc
 
                     ifeq      DOHD
 
@@ -465,8 +541,11 @@ nonfrag             lda       <devpath            get the device path
                     ldy       #DD.DAT-DD.BT       we want DD.BT and DD.BTSZ into ddbt,u
                     os9       I$Read              so read bootstrap sector and bootfile size
                     lbcs      Bye                 branch if error
-                    ldd       <ddbtsz             get DD.BTSZ in D
-                    beq       L040D               branch if zero
+* Remove any existing OS9Boot before renaming TempBoot.  This must not depend
+* on DD.BSZ: extended/fragmented boot deliberately stores DD.BSZ=0 while an
+* OS9Boot file still exists.  Rename returns E$BPNam if the destination name
+* is already present.  I$Delete errors are intentionally ignored, preserving
+* the original behavior when OS9Boot is absent.
                     ldx       <u003E
                     leay      >OS9Boot,pcr
                     lda       #PDELIM
@@ -474,13 +553,13 @@ L03F3               sta       ,x+
                     lda       ,y+
                     bpl       L03F3
                     leax      <bootdev,u
-                    os9       I$Delete            delete the os9boot file
+                    os9       I$Delete            delete old OS9Boot if present
                     ldx       <u003E
-                    leay      >TempBoot,pcr       point to "tempboot" name
+                    leay      >TempBoot,pcr       restore rename source pathname
                     lda       #PDELIM
 L0407               sta       ,x+
                     lda       ,y+
-                    bpl       L0407               copy it into buffer
+                    bpl       L0407
 L040D               tst       <sngldrv
                     beq       L042E
                     clra
@@ -538,6 +617,13 @@ around              ldx       #$0000
                     ldy       #DD.DAT-DD.BT       write it out
                     os9       I$Write
                     lbcs      Bye
+
+                    ifne      fm11
+* FM-11 keeps the complete physical cylinder 0 outside RBF.  Do not reserve
+* or rewrite a normal RBF boot track in the allocation bitmap.  Install the
+* target-specific IPL and boottrack through llfm11 private SetStat services.
+                    lbra      FMWriteBoot
+                    else
                     pshs      u
                     clra
                     clrb
@@ -715,12 +801,103 @@ WrBTrack
                     lbcs      Bye
                     clrb
                     lbra      Bye
+                    endc
+
+                    ifne      fm11
+********************************************************************
+* FMWriteBoot - FM-11 reserved boot-cylinder installation.
+*
+* The OS9Boot file and DD.BT/DD.BSZ have already been committed.  Cylinder 0
+* is not represented in the RBF bitmap, so use the same controller-private
+* services as Cobbler.  v37-test2 reads the target-specific IPL/Bootp1 files
+* from /DD/SYS; upstream -t remains unsupported here.
+********************************************************************
+FMWriteBoot         lda       <devpath
+                    ldb       #SS.Reset
+                    os9       I$SetStt
+                    lbcs      FMResetBad
+
+                    lda       >fmkind,u
+                    cmpa      #2
+                    beq       FMWBHD
+                    ldd       >fmgeom,u
+                    cmpd      #40
+                    beq       FMWB2D
+                    leax      >FMIPL2HDName,pcr
+                    leay      >FMBoot2HDName,pcr
+                    sty       >fmbtptr,u
+                    bra       FMWBIPL
+FMWBHD              leax      >FMIPLHDName,pcr
+                    leay      >FMBootHDName,pcr
+                    sty       >fmbtptr,u
+                    ldy       #512
+                    lbsr      FMReadAsset
+                    lbcs      FMAssetBad
+                    lda       <devpath
+                    ldb       #SS.FM11HDIPL
+                    os9       I$SetStt
+                    lbcs      FMIPLBad
+                    ldx       >fmbtptr,u
+                    ldy       #4352
+                    lbsr      FMReadAsset
+                    lbcs      FMAssetBad
+                    lda       <devpath
+                    ldb       #SS.FM11HDBoot
+                    os9       I$SetStt
+                    lbcs      FMBootBad
+                    bra       FMWBClose
+FMWB2D              leax      >FMIPL2DName,pcr
+                    leay      >FMBoot2DName,pcr
+                    sty       >fmbtptr,u
+FMWBIPL             ldy       #1024
+                    lbsr      FMReadAsset
+                    lbcs      FMAssetBad
+                    lda       <devpath
+                    ldb       #SS.FM11IPL
+                    os9       I$SetStt
+                    lbcs      FMIPLBad
+                    ldx       >fmbtptr,u
+                    ldy       #4352               17 physical 256-byte sectors
+                    lbsr      FMReadAsset
+                    lbcs      FMAssetBad
+                    lda       <devpath
+                    ldb       #SS.FM11Boot
+                    os9       I$SetStt
+                    lbcs      FMBootBad
+FMWBClose           lda       <devpath
+                    os9       I$Close
+                    lbcs      Bye
+
+* OS9Gen has rewritten boot metadata and the reserved boot cylinder.  The
+* target path is closed above.  With the RBSuper Term cache-size fix in place,
+* successful generation can return through the normal OS-9 process exit path.
+                    clrb
+                    lbra      Bye
+
+FMTypeBad           leax      >FMTypeErr,pcr
+                    clrb
+                    lbra      WritExit
+FMTOptBad            leax      >FMTOptErr,pcr
+                    clrb
+                    lbra      WritExit
+FMResetBad          leax      >FMResetErr,pcr
+                    clrb
+                    lbra      WritExit
+FMAssetBad          leax      >FMAssetErr,pcr
+                    lbra      WritExit
+FMIPLBad            leax      >FMIPLErr,pcr
+                    clrb
+                    lbra      WritExit
+FMBootBad           leax      >FMBootErr,pcr
+                    clrb
+                    lbra      WritExit
+                    endc
 
 * Convert Track/Sector to absolute LSN
 * Entry: A = track, B = sector
 * Returns in D
 AbsLSN              pshs      b
-                    ldb       <lsn0+DD.FMT,u      get format byte
+                    ldb       lsn0+DD.FMT,u       get format byte
                     andb      #FMT.SIDE           test sides bit
                     beq       AbsLSN1             branch if 1
                     ldb       #$02                else 2 sides
@@ -728,7 +905,7 @@ AbsLSN              pshs      b
 *         bra   AbsLSN2
 AbsLSN1             ldb       #$01                1 side
 AbsLSN2             mul                           multiply sides times track
-                    lda       <lsn0+DD.TKS,u      get device tracks
+                    lda       lsn0+DD.TKS,u       get device tracks
                     mul                           multiply by (sides * track)
                     addb      ,s+                 add in sector
 *         addb  ,s		add in sector
@@ -992,6 +1169,38 @@ WarnUser            leax      >TWarn,pcr
                     ifgt      Level-1
 L0724               leax      >CantRel,pcr
                     lbra      WritExit
+                    endc
+
+                    ifne      fm11
+********************************************************************
+* FMReadAsset - read external FM-11 IPL/Bootp1 into the existing u0496
+* work buffer (7018 bytes).  Entry: X pathname, Y byte count.
+********************************************************************
+FMReadAsset         pshs      y
+                    lda       #READ.
+                    os9       I$Open
+                    bcs       FMRAOpenFail
+                    sta       >fmassetpath,u
+                    leax      >u0496,u
+                    puls      y
+                    os9       I$Read
+                    bcs       FMRAReadFail
+                    lda       >fmassetpath,u
+                    os9       I$Close
+                    bcs       FMRAExit
+                    leax      >u0496,u
+                    clrb
+                    andcc     #^Carry
+FMRAExit            rts
+FMRAOpenFail        leas      2,s
+                    orcc      #Carry
+                    rts
+FMRAReadFail        pshs      b
+                    lda       >fmassetpath,u
+                    os9       I$Close
+                    puls      b
+                    orcc      #Carry
+                    rts
                     endc
 
                     emod
