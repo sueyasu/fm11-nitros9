@@ -111,9 +111,9 @@ build "$FM/modules/fm11serial.asm"           fm11serial
 build "$FM/modules/fm11console.asm"          fm11console
 build "$FM/modules/term_fm11.asm"            term_fm11
 build "$FM/modules/t1_fm11.asm"              t1_fm11
-build "$ROOT/level1/modules/pipeman.asm"     pipeman
-build "$ROOT/level1/modules/piper.asm"       piper
-build "$ROOT/level1/modules/pipe.asm"        pipe
+build "$FM/modules/pipeman.asm"              pipeman
+build "$FM/modules/piper.asm"                piper
+build "$FM/modules/pipe.asm"                 pipe
 build "$FM/modules/llfm11.asm"                llfm11 -DDrvCount=5
 build "$FM/modules/llfm11hd.asm"              llfm11hd -DDrvCount=5
 build "$FM/modules/h0_m2233b_fm11.asm"               h0_m2233b_fm11
