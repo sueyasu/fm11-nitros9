@@ -223,6 +223,9 @@ cp "$ROOT/level1/cmds/shell_21.asm" "$OUT/shell_21.asm"
 for src in $BUILDABLE_CMDS; do
     cp "$ROOT/level1/cmds/$src.asm" "$OUT/$src.asm"
 done
+
+# FM-11-specific command variants.
+cp "$FM/cmds/format.asm" "$OUT/format.asm"
 (
     cd "$OUT"
     # shellcheck disable=SC2086
