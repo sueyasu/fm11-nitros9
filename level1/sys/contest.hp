@@ -1,0 +1,5 @@
+@CONTEST
+Syntax: ConTest
+Purpose: test FM-11 /Term ANSI SGR and CSI K/J/X erase translation.
+The v30 blink test may remain steady in the current emulator because its renderer
+recognizes the blink attribute bit but does not currently apply it to pixels.

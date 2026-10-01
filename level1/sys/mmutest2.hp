@@ -1,0 +1,6 @@
+@MMUTEST2
+Syntax: MMUTest2
+Purpose: test FM-11 MMR task-bank switching under NitrOS-9 Level 1. The
+         current task and one alternate task map the same logical 4K page to
+         physical blocks $10 and $11 respectively. Requires extended RAM
+         covering $10000-$11FFF; those two 4K blocks are overwritten.

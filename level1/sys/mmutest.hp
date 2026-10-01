@@ -1,0 +1,5 @@
+@MMUTEST
+Syntax: MMUTest
+Purpose: test the FM-11 MMR read-back and one 4K logical window against two
+         independent physical RAM blocks. This v1 test is intended for
+         fm11-headless and uses physical blocks $10 and $11 destructively.
