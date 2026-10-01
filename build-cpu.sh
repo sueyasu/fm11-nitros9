@@ -226,6 +226,9 @@ done
 
 # FM-11-specific command variants.
 cp "$FM/cmds/format.asm" "$OUT/format.asm"
+cp "$FM/cmds/ded.asm"    "$OUT/ded.asm"
+cp "$FM/cmds/minted.asm" "$OUT/minted.asm"
+cp "$FM/cmds/more.asm"   "$OUT/more.asm"
 (
     cd "$OUT"
     # shellcheck disable=SC2086
