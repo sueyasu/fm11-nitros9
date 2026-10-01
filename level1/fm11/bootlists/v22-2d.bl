@@ -1,0 +1,24 @@
+# FM-11 NitrOS-9 Level 1 v22 - 2D boot profile
+ioman
+rbf
+rbsuper
+scf
+fm11serial
+fm11console
+term_fm11
+t1_fm11
+pipeman
+piper
+pipe
+llfm11
+d0_fm11
+d1_fm11
+d2_fm11
+d3_fm11
+md0_fm11
+md1_fm11
+nd0_fm11
+nd1_fm11
+fm11clock
+clock2_soft
+sysgo
