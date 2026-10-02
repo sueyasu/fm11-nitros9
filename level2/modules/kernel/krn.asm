@@ -54,6 +54,9 @@ Revision            set       00        ; module revision
 Edition             set       20        ; module Edition
 
 * The absolute address of where Kernel starts in memory.
+                  IFNE    fm11
+Where               equ       $ED00     ; FM-11: $ED00-$FBFF, below fixed $FC00 area
+                  ELSE
                   IFNE    picothing ; begin conditional assembly for picothing
 Where               equ       $EC00     ; picothing
                   ELSE
@@ -61,6 +64,7 @@ Where               equ       $EC00     ; picothing
 Where               equ       $EE00     ; wildbits
                   ELSE
 Where               equ       $F000     ; coCo 3
+                  ENDC
                   ENDC
                   ENDC
 
