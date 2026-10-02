@@ -102,8 +102,8 @@ build_one() {
     TRAMPSIZE=$(wc -c < "$OUT/fm11tramp.bin" | tr -d ' ')
 
     REL_SLOT=$((0x130))
-    BOOT_SLOT=$((0x1d0))
-    KRN_SLOT=$((0xf00))
+    BOOT_SLOT=$((0x150))
+    KRN_SLOT=$((0xf80))
     TRACK_SIZE=$((0x1200))
     TRAMP_SIZE=$((0xfff0-0xfe00))
 

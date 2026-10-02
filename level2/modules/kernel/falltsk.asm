@@ -75,6 +75,16 @@ FAlltskJoin         equ       *         ; define assembler symbol FAlltskJoin
                     ldx       <D.TskIPt ; get task image table pointer
                     lslb                ; account for 2 bytes/entry
                     stu       b,x       ; save DAT image pointer in task table
+                  IFNE    fm11
+* Keep non-system DAT images in RAM. The user bank is populated only when
+* the scheduler selects that software task. Task 0 is the live kernel map,
+* so update it immediately.
+                    tstb
+                    bne       FAlltskTarget
+                    ldx       #DAT.Regs
+                    lbsr      KrnActualMMUBlock
+                    bra       FAlltskTarget
+                  ELSE
                   IFNE    picothing ; begin conditional assembly for picothing
 * Pico-Thing: every task has its own hardware DAT registers.
 * Compute X = DAT.Regs + task# x 8.  B = task# x 2 here.
@@ -90,6 +100,7 @@ FAlltskJoin         equ       *         ; define assembler symbol FAlltskJoin
                     ldx       #DAT.Regs ; update system DAT image
                   ENDC
                     lbsr      KrnActualMMUBlock ; go bash the hardware
+                  ENDC
 FAlltskTarget       puls      cc,d,x,u,pc ; restore cc,d,x,u,pc from the stack
 
 **************************************************

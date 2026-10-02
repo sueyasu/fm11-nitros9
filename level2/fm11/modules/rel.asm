@@ -4,8 +4,8 @@
 * The ROM IPL loads the fixed $1200-byte kernel track at $2600:
 *
 *   $0000-$012F  REL
-*   $0130-$02FF  Boot slot
-*   $0300-$11FF  Krn slot
+*   $0130-$027F  Boot slot
+*   $0280-$11FF  Krn slot
 *
 * Task 0 is initialized as a 16-page 4 KiB identity map.  This is the
 * hardware representation of the standard eight-block 8 KiB system DAT.
@@ -20,7 +20,7 @@
 
 XX.Size             equ       6
 Offset              equ       Bt.Start+XX.Size
-KrnStart            equ       Bt.Start+$0300
+KrnStart            equ       Bt.Start+$0280
 VCT.Ct              equ       6
 VCT.Sz              equ       3
 

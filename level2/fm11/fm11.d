@@ -20,8 +20,8 @@ SHIFTBIT            EQU       %00000001
 * Level 2 kernel-track placement
 *
 *   $EA00-$EB2F  REL   ($0130)
-*   $EB30-$ECFF  Boot  ($01D0 slot)
-*   $ED00-$FBFF  Krn   ($0F00 slot maximum)
+*   $EB30-$EC7F  Boot  ($0150 slot)
+*   $EC80-$FBFF  Krn   ($0F80 slot maximum)
 *   $FC00-$FFFF  CPU-card fixed area
 ********************************************************************
 

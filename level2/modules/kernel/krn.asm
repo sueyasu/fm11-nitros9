@@ -55,7 +55,7 @@ Edition             set       20        ; module Edition
 
 * The absolute address of where Kernel starts in memory.
                   IFNE    fm11
-Where               equ       $ED00     ; FM-11: $ED00-$FBFF, below fixed $FC00 area
+Where               equ       $EC80     ; FM-11: $EC80-$FBFF, below fixed $FC00 area
                   ELSE
                   IFNE    picothing ; begin conditional assembly for picothing
 Where               equ       $EC00     ; picothing
@@ -677,6 +677,29 @@ l@                  sta       b,x       ; store the flag in the appropriate offs
                     ldx       <D.BlkMap ; get the pointer to 8KB block map
                     inc       KrnBlk,x  ; mark the block holding kernel as used
 
+                  IFNE    fm11
+* FM-11 hardware pages are 4 KiB while the kernel block map is 8 KiB.
+* Probe one 8 KiB block at a time by mapping the corresponding page pair
+* into logical block 5 ($A000-$BFFF). At 1 MiB block $80 folds to pages
+* $00/$01 and therefore aliases block 0; smaller memories ghost earlier.
+                    ldb       #$08
+FM11KrnBlock        tfr       b,a
+                    lsla
+                    sta       >DAT.Regs+$0A
+                    inca
+                    sta       >DAT.Regs+$0B
+                    lda       #$01
+                    sta       >-$6000,x
+                    cmpa      ,x
+                    beq       FM11KrnSizeDone
+                    incb
+                    cmpb      #$80
+                    bne       FM11KrnBlock
+FM11KrnSizeDone     stb       <D.MemSz
+                    clra
+                    pshs      x
+                    addd      ,s++
+                  ELSE
                   IFNE    H6309   ; begin conditional assembly for H6309
                     ldq       #$00080100 ; e=Marker, D=Block # to check
 KrnBlock            asld                ; get next block #
@@ -701,8 +724,16 @@ KrnBlock            aslb                ; B <= 1 (hi bit goes into carry, 0 goes
                     pshs      x         ; save X
                     addd      ,s++      ; add X into D and recover the stack
                   ENDC
+                  ENDC
                     std       <D.BlkMap+2 ; save the newly computed memory block map end pointer
 
+                  IFNE    fm11
+* Restore task-0 logical block 5 to its early identity mapping.
+                    pshs      d
+                    ldd       #$0A0B
+                    std       >DAT.Regs+$0A
+                    puls      d
+                  ELSE
                   IFNE    picothing ; begin conditional assembly for picothing
 * Restore DAT slot 5 after memory sizing loop.  The ghost test exits
 * with B=0 (page 0) mapped into slot 5, creating an alias:
@@ -712,6 +743,7 @@ KrnBlock            aslb                ; B <= 1 (hi bit goes into carry, 0 goes
                     ldb       #5
                     stb       >DAT.Regs+5 restore slot 5 to identity map (page 5)
                     puls      b         restore B=0
+                  ENDC
                   ENDC
 
 ********************************************************************
@@ -1372,6 +1404,19 @@ KrnWeGngBack        equ       *
 * X = address of 1st DAT MMU register to update
 * U = address of DAT image to update into MMU
 KrnActualMMUBlock   leau      1,u       ; point to the actual MMU block
+                  IFNE    fm11
+* Expand each normal 8 KiB DAT entry into two consecutive 4 KiB MMR pages.
+                    ldb       #DAT.BlCt
+FM11KrnMapDAT       lda       ,u
+                    lsla
+                    sta       ,x+
+                    inca
+                    sta       ,x+
+                    leau      2,u
+                    decb
+                    bne       FM11KrnMapDAT
+                    rts
+                  ELSE
                   IFNE    picothing ; begin conditional assembly for picothing
 * Pico-Thing DAT uses 1 byte per block register (not 2).
 * 8 single-byte copies replace the 4 double-byte copies used by CoCo3.
@@ -1412,6 +1457,7 @@ KrnBank             lda       ,u++      ; get a bank
                     clr       MMU_MEM_CTRL ; clear the DAT control flags
                   ENDC
 *]]] Wildbits PORT
+                  ENDC
                   ENDC
 KrnReturn2          rts                 ; return
 
