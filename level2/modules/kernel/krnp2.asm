@@ -173,7 +173,16 @@ Uday                lda       ,x+       ; load A from ,x+
                     puls      cc,u,pc   ; restore IRQ's, register stack pointer & return
                   ENDC
 
-krnp2               lda       #'2       ; debug: signal that we made it into krnp2
+krnp2
+                  IFNE    fm11
+* Install the fixed CPU-card SRAM vectors before the first user task exists.
+                    leax      >FM11TrmpName,pcr
+                    lda       #Systm
+                    os9       F$Link
+                    lbcs      Krnp2ControlDcrash
+                    jsr       ,y
+                  ENDC
+                    lda       #'2       ; debug: signal that we made it into krnp2
                     jsr       <D.BtBug  ; call routine at <D.BtBug
                   IFNE    H6309   ; begin conditional assembly for H6309
                     leay      <SvcTab,pc ; install system calls
@@ -273,6 +282,9 @@ Krnp2InitModule3    ldu       <D.Init   ; get init module pointer
 Krnp2LetTakeOver    os9       F$NProc   ; let it take over
 
 Krnp2Target         fcs       /krnp3/
+                  IFNE    fm11
+FM11TrmpName        fcs       /FM11Trmp/
+                  ENDC
 
 Krnp2ControlDcrash  jmp       <D.Crash  ; transfer control to <D.Crash
 

@@ -98,11 +98,12 @@ FM11_L2_IRQ          EQU       $FE18
 FM11_L2_SWI          EQU       $FE20
 FM11_L2_NMI          EQU       $FE28
 FM11_L2_STATE        EQU       $FEC0
+FM11_L2_USERS        EQU       $FEC6
 FM11_L2_SWISTACK     EQU       $FEE0
 FM11_L2_RETUSR       EQU       $FF00
 FM11_L2_JMPUSR       EQU       $FF20
-FM11_L2_RTIUSR       EQU       $FF28
-FM11_L2_RTIMASK      EQU       $FF30
+FM11_L2_RTIUSR       EQU       $FF2C
+FM11_L2_RTIMASK      EQU       $FF34
 FM11_L2_DATBUF       EQU       $FF40
 FM11_L2_SETTASK      EQU       $FF60
 FM11_L2_FLIP0        EQU       $FFA0

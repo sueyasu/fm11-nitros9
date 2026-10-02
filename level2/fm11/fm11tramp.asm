@@ -57,6 +57,7 @@ FM11TrSWICommon
                     sta       >FM11_L2_STATE
                     beq       FM11TrSystemSWI
 
+                    sts       >FM11_L2_USERS
                     tfr       s,u
                     ldy       #FM11_L2_SWISTACK
                     lda       #R$Size/2
@@ -64,6 +65,7 @@ FM11TrCopy          ldx       ,u++
                     stx       ,y++
                     deca
                     bne       FM11TrCopy
+                    lds       #FM11_L2_SWISTACK
 
                     lda       #1
                     sta       >FM11_L2_STATE+3
@@ -84,6 +86,24 @@ FM11TrTrapCommon
                     sta       >FM11_L2_STATE
                     clra
                     sta       >FM11_L2_STATE+3
+                    lda       >FM11_L2_STATE
+                    beq       FM11TrSelectSystem
+
+* A user interrupt frame becomes inaccessible after selecting task 0.
+* Save the original virtual S and copy the frame to fixed SRAM first.
+                    sts       >FM11_L2_USERS
+                    tfr       s,u
+                    ldy       #FM11_L2_SWISTACK
+                    ldb       #R$Size
+                    lda       >FM11_L2_STATE+1
+                    cmpa      #D.FIRQ
+                    bne       FM11TrTrapCopy
+                    ldb       #3
+FM11TrTrapCopy      lda       ,u+
+                    sta       ,y+
+                    decb
+                    bne       FM11TrTrapCopy
+                    lds       #FM11_L2_SWISTACK
 
 FM11TrSelectSystem
                     clra
@@ -128,6 +148,7 @@ FM11TrReturnRTI     rti
 
                     fill      $00,(FM11_L2_JMPUSR-FM11_L2_TRAMP)-(*-FM11TrImageStart)
 FM11TrJumpUser
+                    lds       >FM11_L2_USERS
                     stb       >DAT.Task
                     jmp       ,u
 
