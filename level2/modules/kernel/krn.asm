@@ -439,8 +439,14 @@ l@                  lda       ,y+       ; load a byte from the source
                     bne       l@        ; loop if we're not done
                   ENDC
 
-* Initialize D.Flip0 routine in low memory by copying the lump of code down from R.Flip0.
+* Initialize D.Flip0.
 * ASSUME: Y is left pointing to R.Flip0 by the previous copy loop.
+                  IFNE    fm11
+* The FM-11 fixed SRAM helper remains visible in every MMR task.
+                    ldu       #FM11_L2_FLIP0
+                    stu       <D.Flip0
+                    leay      SubSiz,y
+                  ELSE
                     ldu       #LowSub   ; somewhere in block 0 that's never modified
                     stu       <D.Flip0  ; switch to system task 0
                   IFNE    H6309   ; begin conditional assembly for H6309
@@ -452,6 +458,7 @@ l@                  lda       ,y+       ; load a byte from the source
                     sta       ,u+       ; store a byte to the destination
                     decb                ; bump up the countercounter
                     bne       l@        ; loop if not done
+                  ENDC
                   ENDC
 
 * Initialize secondary interrupt vectors to all point to vectors for now.
@@ -962,7 +969,12 @@ KrnSysCallSvc       ldu       <D.SysSvc ; get the system call service vector
                     sta       P$State,x ; store it back in the process descriptor
                   ENDC
 * Copy the register stack to the process descriptor.
+                  IFNE    fm11
+                    ldd       >FM11_L2_USERS ; original user S saved by fixed trampoline
+                    std       P$SP,x
+                  ELSE
                     sts       P$SP,x    ; save the stack pointer
+                  ENDC
                     leas      (P$Stack-R$Size),x ; point S to the register stack destination
                   IFNE    H6309   ; begin conditional assembly for H6309
                     leau      R$Size-1,s ; point to the last byte of the destination register stack
@@ -1021,7 +1033,11 @@ AllClr              equ       *         ; define assembler symbol AllClr
                     aim       #$1F,<D.QCnt ; apply immediate bit operation #$1F,<D.QCnt
                     beq       DoFull    ; every 32 system calls, do the full check
                     ldw       #R$Size   ; get the size of the register stack
+                  IFNE    fm11
+                    ldy       #FM11_L2_SWISTACK
+                  ELSE
                     ldy       #Where+SWIStack ; and the stack at top of memory
+                  ENDC
                     orcc      #IntMasks ; mask interrupts
                     tfm       u+,y+     ; move the stack to the top of memory
                   ELSE
@@ -1033,7 +1049,11 @@ AllClr              equ       *         ; define assembler symbol AllClr
 * NOTE: Need to preserve X here - needed for BackTo1 routine
 *   (Currently in fnproc.asm). 145 cycles vs. original 213 cycles
                     ldb       #R$Size   ; else get the size of the register stack
+                  IFNE    fm11
+                    ldy       #FM11_L2_SWISTACK
+                  ELSE
                     ldy       #Where+SWIStack ; and the stack at the top of memory
+                  ENDC
                     orcc      #IntMasks ; mask interrupts
 l@                  lda       ,u+       ; get the source byte
                     sta       ,y+       ; save it at the destination
@@ -1069,10 +1089,24 @@ CpSysStkTo          pshs      cc,x,y,u  ; preserve registers
 *        A = The offset into the DAT image of stack.
 *        B = The task number.
 KrnBlockNumberWhere leau      a,u       ; point to the block number where stack is
+                    orcc      #IntMasks ; shutdown interrupts while we do this
+                  IFNE    fm11
+* Logical 8 KiB windows 5 and 6 expand to MMR pairs A/B and C/D.
+                    lda       1,u
+                    lsla
+                    sta       >DAT.Regs+$0A
+                    inca
+                    sta       >DAT.Regs+$0B
+                    lda       3,u
+                    lsla
+                    sta       >DAT.Regs+$0C
+                    inca
+                    sta       >DAT.Regs+$0D
+                  ELSE
                     lda       1,u       ; get the first block
                     ldb       3,u       ; get a second just in case of overlap
-                    orcc      #IntMasks ; shutdown interrupts while we do this
                     std       >DAT.Regs+5 ; map in the blocks
+                  ENDC
                   IFNE    H6309   ; begin conditional assembly for H6309
                     ldw       #R$Size   ; get the size of register stack
                     tfm       x+,y+     ; copy it
@@ -1084,9 +1118,22 @@ l@                  ldu       ,x++      ; get the source bytes
                     bne       l@        ; branch if not done
                   ENDC
                     ldx       <D.SysDAT ; get the system DAT pointer
+                  IFNE    fm11
+                    lda       $0B,x
+                    lsla
+                    sta       >DAT.Regs+$0A
+                    inca
+                    sta       >DAT.Regs+$0B
+                    lda       $0D,x
+                    lsla
+                    sta       >DAT.Regs+$0C
+                    inca
+                    sta       >DAT.Regs+$0D
+                  ELSE
                     lda       $0B,x     ; get the first block we took out
                     ldb       $0D,x     ; and the second
                     std       >DAT.Regs+5 ; and restore the DAT
+                  ENDC
                     puls      cc,x,y,u,pc ; restore & return
 
 * Process software interrupts from system state.
@@ -1185,7 +1232,12 @@ GetSvcVector
 
 * System IRQ service routine.
 XIRQ                ldx       <D.Proc   ; get the current process pointer
+                  IFNE    fm11
+                    ldd       >FM11_L2_USERS ; interrupted user S saved by trampoline
+                    std       P$SP,x
+                  ELSE
                     sts       P$SP,x    ; save the stack pointer
+                  ENDC
                     lds       <D.SysStk ; get the system stack pointer
                     ldd       <D.SysSvc ; set the system service routine to current
                     std       <D.XSWI2  ; store it in the cross-SWI2 vector
@@ -1292,6 +1344,11 @@ Fst2                leas      ,u        ; put stack ptr into U
 * Entry: X = The Process descriptor pointer.
 *        U = The stack pointer.
 KrnJoin2            equ       *         ; define assembler symbol KrnJoin2
+                  IFNE    fm11
+* Hardware task 1 contains the software task selected by KrnWeGngBack.
+                    lda       #1
+                    jmp       >FM11_L2_RETUSR
+                  ELSE
                   IFNE    picothing ; begin conditional assembly for picothing
 * Pico-Thing: D.TINIT holds the raw task# (set by KrnWeGngBack); write it
 * straight to the DAT.  The CoCo3 task-1 bit set (ora/oim #$01) corrupts an
@@ -1325,11 +1382,16 @@ l@                  ldx       ,u++      ; get the bytes
                     bne       l@        ; branch if not done
                   ENDC
 MyRTI               rti                 ; return from IRQ
+                  ENDC
 
 
 * Execute routine in task 1 pointed to by U.
 * This comes from user requested SWI vectors.
 KrnJoin3            equ       *         ; define assembler symbol KrnJoin3
+                  IFNE    fm11
+                    ldb       #1
+                    jmp       >FM11_L2_JMPUSR
+                  ELSE
                   IFNE    picothing ; begin conditional assembly for picothing
 * Pico-Thing: D.TINIT holds the raw task#; write it straight to the DAT
 * (the CoCo3 ora/oim #$01 toggle is wrong for the N-task DAT, both CPUs)
@@ -1346,6 +1408,7 @@ KrnJoin3            equ       *         ; define assembler symbol KrnJoin3
                   ENDC
                     stb       >DAT.Task ; save it to the DAT
                     jmp       ,u        ; jump to the routine
+                  ENDC
 
 * Flip to task 1 (used by WindInt to switch to GrfDrv) (pointed to
 *  by <D.Flip1). All registers are already preserved on stack for the RTI.
@@ -1371,6 +1434,19 @@ S.Flip1             ldb       #2        ; get the tsk image entry number x2 for 
 
 * Set up the MMU in task 1, B=Task # to swap to, shifted left 1 bit.
 KrnWeGngBack        equ       *
+                  IFNE    fm11
+* FM-11 hardware task 1 is a cache of the selected software task's DAT.
+                    cmpb      <D.Task1N
+                    beq       FM11KrnTaskReady
+                    stb       <D.Task1N
+                    ldu       <D.TskIPt
+                    ldu       b,u
+                    ldb       #1
+                    jsr       >FM11_L2_SETTASK
+FM11KrnTaskReady    lda       #1
+                    sta       <D.TINIT
+                    rts
+                  ELSE
                   IFEQ    picothing ; assemble when not picothing
                     cmpb      <D.Task1N ; are we going back to the same task?
                     beq       KrnReturn2 ; without the DAT image changing?
@@ -1398,6 +1474,7 @@ KrnWeGngBack        equ       *
                   IFEQ    picothing ; assemble when not picothing
                     ldu       <D.TskIPt ; get the task image pointer table
                     ldu       b,u       ; and the address of the DAT image
+                  ENDC
                   ENDC
 * COME HERE FROM FALLTSK
 * Update 8 MMU mappings.
