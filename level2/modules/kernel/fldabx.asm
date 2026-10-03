@@ -29,6 +29,24 @@ FLdabxTarget        pshs      cc,a,x,u  ; save cc,a,x,u on the stack
                     ldb       ,x        ; load B from ,x
                     clr       >MMUDAT   ; restore mapping at $0000-$1FFF
                   ELSE
+                  IFNE    fm11
+* Do not disturb logical block 0: it contains kernel DP and stacks.
+* Use logical block 5 ($A000-$BFFF) as the temporary 8 KiB window.
+                    tfr       b,a
+                    lsla
+                    sta       >DAT.Regs+$0A
+                    inca
+                    sta       >DAT.Regs+$0B
+                    leax      >$A000,x
+                    ldb       ,x
+                    ldu       <D.SysDAT
+                    lda       $0B,u
+                    lsla
+                    sta       >DAT.Regs+$0A
+                    inca
+                    sta       >DAT.Regs+$0B
+                    bra       ldone@
+                  ELSE
                   IFNE    picothing ; begin conditional assembly for picothing
 * Pico-Thing: page $FF (KrnBlk) is the DAT "unavailable" sentinel and
 * cannot be mapped into slot 0 (the access would fault NMI).  The kernel
@@ -42,6 +60,7 @@ lmap@               equ       *         ; remap path for an ordinary block
                     stb       >DAT.Regs ; map block into $0000-$1FFF
                     ldb       ,x        ; load B from ,x
                     clr       >DAT.Regs ; restore mapping at $0000-$1FFF
+                  ENDC
                     endif
 ldone@              puls      cc,a,x,u  ; restore cc,a,x,u from the stack
 
@@ -95,6 +114,24 @@ FLdabxCarry         andcc     #^Carry   ; clear condition-code bits using #^Carr
                   ELSE
                     lda       1,s       ; load A from 1,s
                     orcc      #IntMasks ; set condition-code bits using #IntMasks
+                  IFNE    fm11
+                    sta       <D.IRQTmp ; preserve byte while expanding block number
+                    tfr       b,a
+                    lsla
+                    sta       >DAT.Regs+$0A
+                    inca
+                    sta       >DAT.Regs+$0B
+                    leax      >$A000,x
+                    lda       <D.IRQTmp
+                    sta       ,x
+                    ldu       <D.SysDAT
+                    lda       $0B,u
+                    lsla
+                    sta       >DAT.Regs+$0A
+                    inca
+                    sta       >DAT.Regs+$0B
+                    bra       sdone@
+                  ELSE
                   IFNE    picothing ; begin conditional assembly for picothing
 * Pico-Thing: page $FF (KrnBlk) cannot be mapped into slot 0 (NMI);
 * write the kernel block in place via the fixed $E000-$FFFF window.
@@ -107,5 +144,6 @@ smap@               equ       *         ; remap path for an ordinary block
                     stb       >DAT.Regs ; map selected block into $0000-$1FFF
                     sta       ,x        ; store A at ,x
                     clr       >DAT.Regs ; restore mapping at $0000-$1FFF
+                  ENDC
                     endif
 sdone@              puls      cc,d,x,u,pc ; restore cc,d,x,u,pc from the stack

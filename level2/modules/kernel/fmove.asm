@@ -63,7 +63,9 @@ FMoveTarget         pshs      d,x,y,u   ; preserve it all
                     lda       11,y      ; get MMU block #5
                     ldb       13,y      ; get MMU block #6
                   IFNE    H6309   ; begin conditional assembly for H6309
+                  IFEQ    fm11
                     tfr       d,y       ; move to Y since unused in loop below
+                  ENDC
                   ENDC
 * Main move loop
 * Stack:  0,s=distance to end of source block
@@ -100,9 +102,38 @@ FMoveBytes2         cmpw      #$0100    ; less than 256 bytes?
                     ldw       #$0100    ; force to 256 bytes
 FMoveCount          stw       12,s      ; save count
                     orcc      #IntMasks ; shut off interrupts
+                  IFNE    fm11
+                    ldy       10,s      ; source DAT entry pointer
+                    lda       1,y
+                    lsla
+                    sta       >DAT.Regs+$0A
+                    inca
+                    sta       >DAT.Regs+$0B
+                    ldy       6,s       ; destination DAT entry pointer
+                    lda       1,y
+                    lsla
+                    sta       >DAT.Regs+$0C
+                    inca
+                    sta       >DAT.Regs+$0D
+                  ELSE
                     std       >DAT.Regs+5 ; map in the blocks
+                  ENDC
                     tfm       x+,u+     ; copy up to 256 bytes (max 774 cycles)
+                  IFNE    fm11
+                    ldy       <D.SysDAT
+                    lda       $0B,y
+                    lsla
+                    sta       >DAT.Regs+$0A
+                    inca
+                    sta       >DAT.Regs+$0B
+                    lda       $0D,y
+                    lsla
+                    sta       >DAT.Regs+$0C
+                    inca
+                    sta       >DAT.Regs+$0D
+                  ELSE
                     sty       >DAT.Regs+5 ; restore system blocks 5&6 to normal
+                  ENDC
                     andcc     #^IntMasks ; clear condition-code bits using #^IntMasks
                     ldd       14,s      ; get full count
                     subd      12,s      ; done?
@@ -124,7 +155,7 @@ FMoveUpdSrcOff      std       ,s        ; save updated source offset in block
                     inc       7,s       ; add 2 to destination DAT pointer
                     inc       7,s       ; increment 7,s
 FMoveUpdDstOff      std       2,s       ; save updated destination offset in block
-                    bra       FMoveJoin ; go do next block
+                    lbra      FMoveJoin ; go do next block
 
 * Block move done, return
 FMovePurge          leas      16,s      ; purge stack
@@ -183,7 +214,21 @@ ndst@               puls      y         ; reload the (possibly adjusted) pages
                   ENDC
                     orcc      #IntMasks ; shut IRQ's off
                     stb       <D.IRQTmp+1 ; save copy of current copy block size
+                  IFNE    fm11
+                    tfr       y,d       ; A=source 8K block, B=destination 8K block
+                    lsla
+                    sta       >DAT.Regs+$0A
+                    inca
+                    sta       >DAT.Regs+$0B
+                    tfr       b,a
+                    lsla
+                    sta       >DAT.Regs+$0C
+                    inca
+                    sta       >DAT.Regs+$0D
+                    ldb       <D.IRQTmp+1
+                  ELSE
                     sty       >DAT.Regs+5 ; swap in source/dest MMU blocks into $A000-$DFFF
+                  ENDC
 ***** NO STACK USE BETWEEN HERE.....
                     andb      #$07      ; 2 1st, do single byte copies for 1-7 leftover bytes
                     beq       FMoveSizeBack ; 3 No leftovers, go to 8 byte copy routine
@@ -209,9 +254,22 @@ FMoveCyclsPerByts   pulu      y,d       ; 9 55 cycles per 8 bytes copied
                     bne       FMoveCyclsPerByts ; 3
                     exg       x,u       ; 8 Swap updated source/dest ptrs
 FMoveSystemDAT      ldy       <D.SysDAT ; 6 Get system DAT pointer
+                  IFNE    fm11
+                    lda       $0B,y
+                    lsla
+                    sta       >DAT.Regs+$0A
+                    inca
+                    sta       >DAT.Regs+$0B
+                    lda       $0D,y
+                    lsla
+                    sta       >DAT.Regs+$0C
+                    inca
+                    sta       >DAT.Regs+$0D
+                  ELSE
                     lda       $0B,y     ; 5 Get original MMU blocks
                     ldb       $0D,y     ; 5
                     std       >DAT.Regs+5 ; 6 Restore originals
+                  ENDC
 ***** AND HERE...........
                   IFNE    picothing ; begin conditional assembly for picothing
 * Undo the fixed-window bias for any side whose page was KrnBlk.  The

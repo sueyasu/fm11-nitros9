@@ -128,7 +128,12 @@ SetProc             ldd       <D.SysSvc ; set system call processor to system si
                     stb       P$State,x ; store B at P$State,x
                   ENDC
 * copy register stack to process descriptor
+                  IFNE    fm11
+                    ldd       >FM11_L2_USERS ; original trapped user S
+                    std       P$SP,x
+                  ELSE
                     sts       P$SP,x    ; save stack pointer
+                  ENDC
                     leas      (P$Stack-R$Size),x ; point S to register stack destination
                     andcc     #^IntMasks ; force interrupts back on
                     leau      ,s        ; point to destination register stack
@@ -152,10 +157,23 @@ done                puls      b         ; restore task #
                     lslb                ; adjust task # to fit table
                     ldu       b,u       ; get the DAT image pointer
                     leau      a,u       ; point to the blocks needed
+                    orcc      #IntMasks ; shut IRQ's down
+                  IFNE    fm11
+                    lda       1,u
+                    lsla
+                    sta       >DAT.Regs+$0A
+                    inca
+                    sta       >DAT.Regs+$0B
+                    lda       3,u
+                    lsla
+                    sta       >DAT.Regs+$0C
+                    inca
+                    sta       >DAT.Regs+$0D
+                  ELSE
                     lda       1,u       ; get 1st block
                     ldb       3,u       ; get a second in case of overlap
-                    orcc      #IntMasks ; shut IRQ's down
                     std       >DAT.Regs+5 ; map in the blocks
+                  ENDC
                   IFNE    H6309   ; begin conditional assembly for H6309
                     ldw       #R$Size   ; get size of register stack
                     tfm       x+,y+     ; move 'em to process descriptor
@@ -167,9 +185,22 @@ Uday                lda       ,x+       ; load A from ,x+
                     bne       Uday      ; branch if zero is clear to Uday
                   ENDC
                     ldx       <D.SysDAT ; get the system DAT image pointer
+                  IFNE    fm11
+                    lda       $0B,x
+                    lsla
+                    sta       >DAT.Regs+$0A
+                    inca
+                    sta       >DAT.Regs+$0B
+                    lda       $0D,x
+                    lsla
+                    sta       >DAT.Regs+$0C
+                    inca
+                    sta       >DAT.Regs+$0D
+                  ELSE
                     lda       $0B,x     ; get the original blocks
                     ldb       $0D,x     ; load B from $0D,x
                     std       >DAT.Regs+5 ; map 'em back in
+                  ENDC
                     puls      cc,u,pc   ; restore IRQ's, register stack pointer & return
                   ENDC
 
