@@ -178,6 +178,9 @@ FM11TrDATBuf        fill      $00,FM11_MMR_PAGES
 
                     fill      $00,(FM11_L2_SETTASK-FM11_L2_TRAMP)-(*-FM11TrImageStart)
 FM11TrSetTask
+* Preserve the caller-visible register set.  The loader uses D/X/Y/U as
+* scratch while task 1 is being programmed, but its callers retain them.
+                    pshs      cc,d,x,y,u
                     orcc      #IntMasks
                     stb       >FM11_L2_STATE+4
 
@@ -205,7 +208,7 @@ FM11TrWriteDAT      lda       ,y+
 
                     clra
                     sta       >DAT.Task
-                    rts
+                    puls      cc,d,x,y,u,pc
 
                     fill      $00,(FM11_L2_FLIP0-FM11_L2_TRAMP)-(*-FM11TrImageStart)
 FM11TrFlip0
