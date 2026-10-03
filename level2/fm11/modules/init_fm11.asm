@@ -41,6 +41,14 @@ start               equ       *
                     fdb       BuildStr
                     fcb       0,0
 
+* Level 2 configuration tail: MonType, MouseInf, KeyRptS, KeyRptD.
+* FM-11 initial serial-console bring-up has no display/mouse subsystem,
+* but these five bytes are still part of the Level 2 Init ABI.
+                    fcb       0
+                    fcb       0,1
+                    fcb       $1E
+                    fcb       $03
+
 name                fcs       /Init/
                     fcb       edition
 
