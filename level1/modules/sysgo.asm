@@ -114,7 +114,11 @@ ShellPrm            equ       *
                   IFNE    picothing
                     fcc       "i=/term"
                   ELSE
+                  IFNE    fm11
+                    fcc       "i=/T1"
+                  ELSE
                     fcc       "i=/1"
+                  ENDC
                   ENDC
                     endc
 CRtn                fcb       C$CR
