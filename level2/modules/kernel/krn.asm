@@ -75,6 +75,7 @@ MName               fcs       /Krn/
 
 * FILL - all unused bytes are now here
                   IFNE    H6309   ; begin conditional assembly for H6309
+                  IFEQ    fm11
                     fcc       /www.nitros9.org /
                     fcc       /www.nitros9.org /
                     fcc       /www.nitros9.org /
@@ -83,6 +84,7 @@ MName               fcs       /Krn/
                     fcc       /www.nitros9.org /
                     fcc       /www.nitros9.org /
                     fcc       /www/
+                  ENDC
                   ELSE
                   IFNE    wildbits ; begin conditional assembly for wildbits
                     fcc       /www.nitros9.org /
@@ -94,7 +96,9 @@ MName               fcs       /Krn/
                     fcc       /www.nitros9.org /
                     fcc       /www.nitros9.org /
                   ELSE
+                  IFEQ    fm11
                     fcc       /www.nitr/
+                  ENDC
                   ENDC
                   ENDC
 

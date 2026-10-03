@@ -20,6 +20,16 @@ FLDAXY              ldx       R$X,u     ; get offset within block (S/B $0000-$1F
 * format)
 FLdMMUBlockData     lda       1,y       ; get MMU block # to get data from
                     clrb                ; clear carry/setup for STB
+                  IFNE    fm11
+                    pshs      u,cc      ; preserve caller U and interrupt state
+                    orcc      #IntMasks ; temporary MMU window must be atomic
+                    lbsr      FM11Map5  ; map 8 KiB block into $A000-$BFFF
+                    lda       >$A000,x
+                    pshs      a
+                    lbsr      FM11Restore5
+                    puls      a
+                    puls      pc,u,cc
+                  ELSE
                     pshs      cc        ; preserve interrupt status/settings
                     orcc      #IntMasks ; shut IRQ's off
                   IFNE    mc09    ; begin conditional assembly for mc09
@@ -42,10 +52,24 @@ mblk@               equ       *         ; remap path for an ordinary block
                     stb       >DAT.Regs ; map block 0 into $0000-$1FFF
                   ENDC
                     puls      pc,cc     ; get interrupt status/(or turn on) & return
+                  ENDC
 
 * Get 1st byte of LDDDXY - also used by many other routines
 * Increments X on exit; adjusts X for within 8K block & Y (DAT img ptr)
 LDAXY               lda       1,y       ; get MMU block #
+                  IFNE    fm11
+                    pshs      u,b,cc    ; save regs
+                    clrb
+                    orcc      #IntMasks
+                    lbsr      FM11Map5
+                    lda       >$A000,x
+                    leax      1,x
+                    pshs      a
+                    lbsr      FM11Restore5
+                    puls      a
+                    puls      u,b,cc
+                    bra       AdjBlk0
+                  ELSE
                     pshs      b,cc      ; save regs
                     clrb                ; clear B
                     orcc      #IntMasks ; shut off interrupts
@@ -63,6 +87,7 @@ lax@                equ       *         ; remap path for an ordinary block
                     stb       >DAT.Regs ; map MMU block #0 back
                     puls      b,cc      ; restore b,cc from the stack
                     bra       AdjBlk0   ; branch unconditionally to AdjBlk0
+                  ENDC
 
 FLdBumpOffStart     leax      >-DAT.BlSz,x ; bump offset ptr to start of block again
                     leay      2,y       ; bump source MMU block up to next one in DAT Image
@@ -100,6 +125,19 @@ FLdTarget           pshs      u,y,x     ; preserve regs
                     leax      d,x       ; compute d,x into X
                   ENDC
                     bsr       AdjBlk0   ; wrap address around for 1 block
+                  IFNE    fm11
+                    pshs      cc
+                    orcc      #IntMasks
+                    lda       1,y
+                    lbsr      FM11Map5
+                    lda       3,y
+                    lbsr      FM11Map6
+                    ldd       >$A000,x
+                    pshs      d
+                    lbsr      FM11Restore56
+                    puls      d
+                    puls      pc,u,y,x,cc
+                  ELSE
                   IFNE    picothing ; begin conditional assembly for picothing
 * Picothing DAT RAM is readable SRAM.  Read the actual hardware slot
 * values so we restore exactly what was there (the DAT image may hold
@@ -133,3 +171,4 @@ fldt@               ldu       >DAT.Regs ; save actual hardware slots 0 and 1
                     stu       >DAT.Regs ; map original blocks in
                   ENDC
                     puls      pc,u,y,x,cc ; restore regs & return
+                  ENDC

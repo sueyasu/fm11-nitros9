@@ -33,18 +33,10 @@ FLdabxTarget        pshs      cc,a,x,u  ; save cc,a,x,u on the stack
 * Do not disturb logical block 0: it contains kernel DP and stacks.
 * Use logical block 5 ($A000-$BFFF) as the temporary 8 KiB window.
                     tfr       b,a
-                    lsla
-                    sta       >DAT.Regs+$0A
-                    inca
-                    sta       >DAT.Regs+$0B
+                    lbsr      FM11Map5
                     leax      >$A000,x
                     ldb       ,x
-                    ldu       <D.SysDAT
-                    lda       $0B,u
-                    lsla
-                    sta       >DAT.Regs+$0A
-                    inca
-                    sta       >DAT.Regs+$0B
+                    lbsr      FM11Restore5
                     bra       ldone@
                   ELSE
                   IFNE    picothing ; begin conditional assembly for picothing
@@ -117,19 +109,11 @@ FLdabxCarry         andcc     #^Carry   ; clear condition-code bits using #^Carr
                   IFNE    fm11
                     sta       <D.IRQTmp ; preserve byte while expanding block number
                     tfr       b,a
-                    lsla
-                    sta       >DAT.Regs+$0A
-                    inca
-                    sta       >DAT.Regs+$0B
+                    lbsr      FM11Map5
                     leax      >$A000,x
                     lda       <D.IRQTmp
                     sta       ,x
-                    ldu       <D.SysDAT
-                    lda       $0B,u
-                    lsla
-                    sta       >DAT.Regs+$0A
-                    inca
-                    sta       >DAT.Regs+$0B
+                    lbsr      FM11Restore5
                     bra       sdone@
                   ELSE
                   IFNE    picothing ; begin conditional assembly for picothing
@@ -147,3 +131,30 @@ smap@               equ       *         ; remap path for an ordinary block
                   ENDC
                     endif
 sdone@              puls      cc,d,x,u,pc ; restore cc,d,x,u,pc from the stack
+
+                  IFNE    fm11
+* Shared FM-11 temporary-window helpers used by fld.asm/fldabx.asm.
+* A contains a standard NitrOS-9 8 KiB physical block number.
+FM11Map5            lsla
+                    sta       >DAT.Regs+$0A
+                    inca
+                    sta       >DAT.Regs+$0B
+                    rts
+
+FM11Map6            lsla
+                    sta       >DAT.Regs+$0C
+                    inca
+                    sta       >DAT.Regs+$0D
+                    rts
+
+* U is scratch in these restore helpers.
+FM11Restore5        ldu       <D.SysDAT
+                    lda       $0B,u
+                    bra       FM11Map5
+
+FM11Restore56       ldu       <D.SysDAT
+                    lda       $0B,u
+                    bsr       FM11Map5
+                    lda       $0D,u
+                    bra       FM11Map6
+                  ENDC
