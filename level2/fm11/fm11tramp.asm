@@ -52,9 +52,7 @@ FM11TrSWICommon
                     sta       >FM11_L2_STATE+1
                     ldb       [R$PC,s]
                     stb       >FM11_L2_STATE+2
-                    lda       >DAT.Task
-                    anda      #$0F
-                    sta       >FM11_L2_STATE
+                    lda       >FM11_L2_STATE
                     beq       FM11TrSystemSWI
 
                     sts       >FM11_L2_USERS
@@ -81,9 +79,7 @@ FM11TrSystemSWI
 
 FM11TrTrapCommon
                     sta       >FM11_L2_STATE+1
-                    lda       >DAT.Task
-                    anda      #$0F
-                    sta       >FM11_L2_STATE
+                    lda       >FM11_L2_STATE
                     clra
                     sta       >FM11_L2_STATE+3
                     lda       >FM11_L2_STATE
@@ -113,6 +109,7 @@ FM11TrSelectSystem
                     beq       FM11TrKeepTaskShadow
                     sta       <D.TINIT
 FM11TrKeepTaskShadow
+                    clr       >FM11_L2_STATE
                     clra
                     ldb       >FM11_L2_STATE+1
                     tfr       d,x
@@ -134,6 +131,7 @@ FM11TrSWIStack      fill      $00,R$Size
 
                     fill      $00,(FM11_L2_RETUSR-FM11_L2_TRAMP)-(*-FM11TrImageStart)
 FM11TrReturnUser
+                    sta       >FM11_L2_STATE
                     sta       >DAT.Task
                     leas      ,y
                     tstb
@@ -149,16 +147,19 @@ FM11TrReturnRTI     rti
                     fill      $00,(FM11_L2_JMPUSR-FM11_L2_TRAMP)-(*-FM11TrImageStart)
 FM11TrJumpUser
                     lds       >FM11_L2_USERS
+                    stb       >FM11_L2_STATE
                     stb       >DAT.Task
                     jmp       ,u
 
                     fill      $00,(FM11_L2_RTIUSR-FM11_L2_TRAMP)-(*-FM11TrImageStart)
 FM11TrRTIUser
+                    sta       >FM11_L2_STATE
                     sta       >DAT.Task
                     rti
 
                     fill      $00,(FM11_L2_RTIMASK-FM11_L2_TRAMP)-(*-FM11TrImageStart)
 FM11TrRTIMasked
+                    sta       >FM11_L2_STATE
                     sta       >DAT.Task
                     lda       ,s
                     ora       #IntMasks
@@ -211,6 +212,7 @@ FM11TrFlip0
                     sta       >FM11_L2_STATE+5
                     clra
                     sta       >DAT.Task
+                    sta       >FM11_L2_STATE
                     clr       <D.SSTskN
                     tfr       x,s
                     lda       >FM11_L2_STATE+5
