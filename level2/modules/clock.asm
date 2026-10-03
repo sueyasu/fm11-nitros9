@@ -1,22 +1,22 @@
 ********************************************************************
 * clock - Level 2 clock module
 *
-* Two hardware variants selected by the port symbol:
+* Hardware variants selected by the port symbol:
 *   picothing : the Pico-Thing 50Hz tick timer (no GIME, always polls)
+*   fm11      : the FM-11 6840 PTM 50Hz timer (no GIME, always polls)
 *   otherwise : the CoCo3 GIME VSYNC clock
 *
-* The Pico-Thing has no GIME, so the standard GIME clock (which gates
-* DoPoll on D.IRQS and toggles the GIME) cannot service its devices; its
-* variant uses a simple tick timer and polls every tick instead.
+* Pico-Thing and FM-11 have no GIME, so the standard GIME clock (which
+* gates DoPoll on D.IRQS and toggles the GIME) cannot service their
+* devices; these variants poll interrupt sources on every clock tick.
 ********************************************************************
 
-                    ifne      picothing
+                    ifne      picothing+fm11
 ********************************************************************
-* clock_picothing - Clock module for Pico-Thing Level 2
+* clock_picothing - Clock module for Pico-Thing / FM-11 Level 2
 *
-* Uses the Pico's 50Hz tick timer at $FFC8-$FFC9.
-*   $FFC8 write: bit 0 = enable (1) / disable (0)
-*   $FFC9 read:  bit 7 = IRQ pending; reading clears it
+* Pico-Thing uses its 50Hz tick timer at $FFC8-$FFC9.
+* FM-11 uses the 6840 PTM definitions supplied by fm11.d.
 *
 * Edt/Rev  YYYY/MM/DD  Modified by
 * Comment
@@ -66,13 +66,19 @@ NewSvc              fcb       F$Time
 * Called by the kernel on every IRQ. We check whether the tick
 * timer fired and route to either SvcVIRQ (clock tick) or DoPoll.
 *
-* Reading TICK.Stat both tests and acknowledges the timer IRQ.
-*
 SvcIRQ
+                  IFNE    fm11
+                    lda       >FM11_IRQSTAT
+                    bita      #FM11_IRQSTAT_PTM
+                    beq       NoClock
+                    lda       >PTM_STATUS
+                    bra       YesClock
+                  ELSE
                     lda       >TICK.Stat read and acknowledge tick timer
                     bmi       YesClock  bit 7 set = tick timer fired
+                  ENDC
 
-                    leax      DoPoll,pcr not clock IRQ, poll other sources
+NoClock             leax      DoPoll,pcr not clock IRQ, poll other sources
                     lda       #$FF
                     sta       <D.QIRQ   flag as non-clock IRQ
                     bra       ContIRQ
@@ -318,8 +324,18 @@ LinkOk              sty       <D.Clock2 save Clock2 entry point
                     orcc      #IntMasks disable interrupts
 
 * Enable the 50Hz tick timer
+                  IFNE    fm11
+                    lda       #FM11_IRQ_PTM
+                    sta       >FM11_IRQEN
+                    lda       #PTM_CTRL_IRQ
+                    sta       >PTM_CTRL1
+                    ldd       #PTM_RELOAD
+                    std       >PTM_COUNT1
+                    lda       >PTM_STATUS
+                  ELSE
                     lda       #$01      bit 0 = enable
                     sta       >TICK.Ctrl start tick timer
+                  ENDC
 
                     ldd       #59*256+TkPerTS trigger RTC read soon
                     std       <D.Sec    will prompt Clock2 read at next timeslice
