@@ -1302,6 +1302,15 @@ S.SysIRQ
                     clr       <D.SSTskN ; clear out the memory copy (task 0)
                     jsr       [>D.SvcIRQ] ; call the routine (normally Clock calling D.Poll)
                     inc       <D.SSTskN ; save the task number for system state
+                  IFNE    fm11
+* FM-11 loses the task-0 kernel map as soon as DAT.Task becomes 1.
+* Finish the return entirely in fixed CPU-card SRAM. Carry from D.SvcIRQ
+* is still valid here (INC/LDA do not modify C).
+                    lda       #1        ; hardware task 1 holds the user DAT image
+                    bcc       FM11SysIRQReturn
+                    jmp       >FM11_L2_RTIMASK ; return with IRQs masked
+FM11SysIRQReturn    jmp       >FM11_L2_RTIUSR ; normal user IRQ return
+                  ELSE
                   IFNE    picothing ; begin conditional assembly for picothing
 * Pico-Thing: D.TINIT holds raw task#, just write it to DAT.Task
                     lda       <D.TINIT  get the user's task number
@@ -1313,6 +1322,7 @@ S.SysIRQ
                     sta       >DAT.Task ; save to the DAT as well
                   ENDC
                     bra       DoneIRQ   ; check for error and exit
+                  ENDC
 
 FastIRQ             jsr       [>D.SvcIRQ] ; call the orutine (normally Clock calling D.Poll)
 DoneIRQ             bcc       KrnReturn ; no error on IRQ, so exit
@@ -1332,6 +1342,13 @@ KrnSysProcDesc      ldx       <D.SysPrc ; get the system process descriptor poin
                     orcc      #IntMasks ; shut off interrupts
                     sta       <D.SSTskN ; save the task number for system state
                     beq       Fst2      ; if task 0, we're done
+                  IFNE    fm11
+* U points at the register frame to resume. Set S before leaving task 0;
+* the fixed SRAM stub switches to hardware task 1 and performs the RTI.
+                    leas      ,u
+                    lda       #1
+                    jmp       >FM11_L2_RTIUSR
+                  ELSE
                   IFNE    picothing ; begin conditional assembly for picothing
 * Pico-Thing: D.TINIT holds raw task#, just write it to DAT.Task
                     lda       <D.TINIT  get the user's task number
@@ -1340,6 +1357,7 @@ KrnSysProcDesc      ldx       <D.SysPrc ; get the system process descriptor poin
                     sta       <D.TINIT  ; update the shadow register
                   ENDC
                     sta       >DAT.Task ; save to the DAT as well
+                  ENDC
 Fst2                leas      ,u        ; put stack ptr into U
                     rti                 ; return
 
@@ -1418,6 +1436,13 @@ KrnJoin3            equ       *         ; define assembler symbol KrnJoin3
 *  by <D.Flip1). All registers are already preserved on stack for the RTI.
 S.Flip1             ldb       #2        ; get the tsk image entry number x2 for Grfdrv (task 1)
                     bsr       KrnWeGngBack ; copy over the DAT image
+                  IFNE    fm11
+* Update the system-task shadow before leaving task 0. Once DAT.Task is
+* changed, only the fixed SRAM trampoline is safe to execute.
+                    inc       <D.SSTskN
+                    lda       #1
+                    jmp       >FM11_L2_RTIUSR
+                  ELSE
                   IFNE    picothing ; begin conditional assembly for picothing
 * Pico-Thing: D.TINIT set by KrnWeGngBack, write directly (GrfDrv not used;
 * the CoCo3 ora/oim #$01 toggle is wrong for the N-task DAT, both CPUs)
@@ -1435,6 +1460,7 @@ S.Flip1             ldb       #2        ; get the tsk image entry number x2 for 
                     sta       >DAT.Task ; save it to the DAT
                     inc       <D.SSTskN ; increment the system state task number
                     rti                 ; return
+                  ENDC
 
 * Set up the MMU in task 1, B=Task # to swap to, shifted left 1 bit.
 KrnWeGngBack        equ       *
