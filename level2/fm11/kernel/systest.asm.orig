@@ -1,13 +1,13 @@
 ********************************************************************
-* FM-11 staged boot test #4: establish the three standard paths.
+* FM-11 staged boot test #5: launch a real user task.
 *
-* Mirrors the normal KrnP2 order:
-*   1. link/init IOMan
-*   2. I$ChgDir to Init.SysStr (normally /DD)
-*   3. I$Open Init.StdStr (normally /Term)
-*   4. save stdin and I$Dup twice for stdout/stderr
+* Mirrors the normal KrnP2 order through standard-path setup, then:
+*   5. F$Fork FM11Idle
+*   6. F$NProc to schedule the child
 *
-* Stop after P$Path[0..2] have been established.
+* Two-stage diagnostic:
+*   USER TASK START   = system side, immediately before F$Fork
+*   USER TASK RUNNING = first code executed by FM11Idle in user state
 ********************************************************************
 FM11IOManTest       lbsr      LnkIOMan
                     bcc       FM11IOManLinked
@@ -74,7 +74,25 @@ FM11STDup2OK        ldx       <D.Proc
 
                     leax      >FM11STMsgStdPaths,pcr
                     lbsr      FM11STPutS
-                    rts
+
+                    leax      >FM11STMsgUserTaskStart,pcr
+                    lbsr      FM11STPutS
+
+                    leax      >FM11STShellName,pcr
+                    lda       #Objct
+                    clrb
+                    ldy       #$0000
+                    os9       F$Fork
+                    bcc       FM11STUserForkOK
+                    leax      >FM11STFailFork,pcr
+                    lbra      FM11STFail
+
+FM11STUserForkOK    os9       F$NProc
+
+* F$NProc must transfer control to the scheduled child and not return here.
+                    ldb       #$0A
+                    leax      >FM11STFailNProcReturn,pcr
+                    lbra      FM11STFail
 
 ********************************************************************
 * FM11SysTest - minimal Level 2 system-call self-test
@@ -788,6 +806,8 @@ FM11STMsgDDChgDir   fcc       /DD CHGDIR OK/
 FM11STMsgTermOpen   fcc       /TERM OPEN OK/
                     fcb       $0D,$0A,$00
 FM11STMsgStdPaths   fcc       /STD PATHS OK/
+                    fcb       $0D,$0A,$00
+FM11STMsgUserTaskStart fcc    /USER TASK START/
                     fcb       $0D,$0A,$00
 
 FM11STShellName     fcs       /FM11Idle/

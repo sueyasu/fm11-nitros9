@@ -1,13 +1,14 @@
 ********************************************************************
-* FM-11 staged boot test #5: launch a real user task.
+* FM-11 staged boot test #6: launch the real Shell.
 *
 * Mirrors the normal KrnP2 order through standard-path setup, then:
-*   5. F$Fork FM11Idle
-*   6. F$NProc to schedule the child
+*   5. F$Fork Shell
+*   6. F$NProc to schedule the Shell
 *
-* Two-stage diagnostic:
-*   USER TASK START   = system side, immediately before F$Fork
-*   USER TASK RUNNING = first code executed by FM11Idle in user state
+* Diagnostics:
+*   SHELL START        = immediately before F$Fork
+*   SHELL FORK OK P=xx = child descriptor built and queued
+* After F$NProc, successful execution is confirmed by Shell's own output.
 ********************************************************************
 FM11IOManTest       lbsr      LnkIOMan
                     bcc       FM11IOManLinked
@@ -75,7 +76,7 @@ FM11STDup2OK        ldx       <D.Proc
                     leax      >FM11STMsgStdPaths,pcr
                     lbsr      FM11STPutS
 
-                    leax      >FM11STMsgUserTaskStart,pcr
+                    leax      >FM11STMsgShellStart,pcr
                     lbsr      FM11STPutS
 
                     leax      >FM11STShellName,pcr
@@ -83,13 +84,20 @@ FM11STDup2OK        ldx       <D.Proc
                     clrb
                     ldy       #$0000
                     os9       F$Fork
-                    bcc       FM11STUserForkOK
+                    bcc       FM11STShellForkOK
                     leax      >FM11STFailFork,pcr
                     lbra      FM11STFail
 
-FM11STUserForkOK    os9       F$NProc
+FM11STShellForkOK   pshs      a
+                    leax      >FM11STMsgShellForkOK,pcr
+                    lbsr      FM11STPutS
+                    puls      a
+                    lbsr      FM11STHexA
+                    lbsr      FM11STCRLF
 
-* F$NProc must transfer control to the scheduled child and not return here.
+                    os9       F$NProc
+
+* F$NProc must transfer control to the scheduled Shell and not return here.
                     ldb       #$0A
                     leax      >FM11STFailNProcReturn,pcr
                     lbra      FM11STFail
@@ -807,10 +815,12 @@ FM11STMsgTermOpen   fcc       /TERM OPEN OK/
                     fcb       $0D,$0A,$00
 FM11STMsgStdPaths   fcc       /STD PATHS OK/
                     fcb       $0D,$0A,$00
-FM11STMsgUserTaskStart fcc    /USER TASK START/
+FM11STMsgShellStart fcc       /SHELL START/
                     fcb       $0D,$0A,$00
+FM11STMsgShellForkOK fcc      /SHELL FORK OK P=/
+                    fcb       $00
 
-FM11STShellName     fcs       /FM11Idle/
+FM11STShellName     fcs       /Shell/
 
 FM11STFailID        fcc       /ID FAIL E=/
                     fcb       $00
