@@ -46,13 +46,13 @@ build_one() {
 -Dfm11=1 -DH6309=$H6309 \
 -DNOS9VER=$NOS9VER -DNOS9MAJ=$NOS9MAJ -DNOS9MIN=$NOS9MIN"
 
-    for src in llfm11 d0_fm11 dd_fm11 fm11serial t1_fm11 init_fm11 fm11idle; do
+    for src in llfm11 d0_fm11 dd_fm11 fm11serial t1_fm11 init_fm11; do
         # shellcheck disable=SC2086
         $ASBASE --format=os9 --output="$OUT/$src" "$FM/modules/$src.asm"
     done
 
     echo "FM-11 Level 2 $CPU bring-up modules:"
-    for f in llfm11 d0_fm11 dd_fm11 fm11serial t1_fm11 init_fm11 fm11idle; do
+    for f in llfm11 d0_fm11 dd_fm11 fm11serial t1_fm11 init_fm11; do
         size=$(wc -c < "$OUT/$f" | tr -d ' ')
         printf '  %-12s %s bytes\n' "$f:" "$size"
     done

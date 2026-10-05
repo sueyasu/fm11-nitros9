@@ -221,10 +221,6 @@ krnp2
                     leay      SvcTab,pc ; install system calls
                   ENDC
                     os9       F$SSvc    ; call OS-9 service F$SSvc
-                  IFNE    fm11
-                    lbsr      FM11IOManTest
-FM11IOManTestStop   bra       FM11IOManTestStop
-                  ENDC
                   IFEQ    TC9-1   ; begin conditional assembly for TC9-1
                     leax      Trap,pc   ; compute Trap,pc into X
                     stx       <D.SWI    ; store X at <D.SWI
@@ -504,9 +500,6 @@ NotRAMTbl           fcb       $C0,$10   ; $C0-$CF: sectored I/O pages $C0-$C7, n
                     fcb       $00,$00   ; end
                   ENDC
 *]]] Wildbits PORT
-                  IFNE    fm11
-                    use       systest.asm
-                  ENDC
                     emod
 eom                 equ       *         ; define assembler symbol eom
                     end
