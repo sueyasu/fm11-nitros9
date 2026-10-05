@@ -1368,8 +1368,13 @@ Fst2                leas      ,u        ; put stack ptr into U
 KrnJoin2            equ       *         ; define assembler symbol KrnJoin2
                   IFNE    fm11
 * Hardware task 1 contains the software task selected by KrnWeGngBack.
-* FM-11 diagnostic #3: Shell PID $02 has reached KrnJoin2.
-FM11NProcDiag3Done
+* Record whether this is software task $02 while task 0 is still visible.
+                    clr       >FM11_L2_STATE+4
+                    lda       P$Task,x
+                    cmpa      #$02
+                    bne       FM11KrnJoinNoBreak
+                    inc       >FM11_L2_STATE+4
+FM11KrnJoinNoBreak
                     lda       #1
                     jmp       >FM11_L2_RETUSR
                   ELSE

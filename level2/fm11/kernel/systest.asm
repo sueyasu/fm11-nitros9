@@ -430,7 +430,27 @@ FM11STForkOK        pshs      a
                     puls      a
                     lbsr      FM11STHexA
                     lbsr      FM11STCRLF
-                    lbra       FM11STPrcInitDone
+
+********************************************************************
+* Run the forked Shell through F$NProc.
+*
+* F$Fork left the child as the only process on D.AProcQ.  F$NProc
+* must remove it from the queue, allocate/reuse its task, make it the
+* current process, switch to the user DAT image and enter Shell.
+* F$NProc must not return to this SWI2 caller.
+********************************************************************
+                    leax      >FM11STMsgForkNProc,pcr
+                    lbsr      FM11STPutS
+                    ldx       <D.AProcQ
+                    lda       P$ID,x
+                    lbsr      FM11STHexA
+                    lbsr      FM11STCRLF
+
+                    os9       F$NProc
+
+                    ldb       #$01
+                    leax      >FM11STFailForkNProcReturn,pcr
+                    lbra      FM11STFail
 
 FM11STForkFailPreQueue
                     ldb       #$01
@@ -627,9 +647,9 @@ FM11STMsgDelTsk     fcc       /DELTSK OK/
                     fcb       $0D,$0A,$00
 FM11STMsgDelPrc     fcc       /DELPRC OK/
                     fcb       $0D,$0A,$00
-FM11STMsgLink       fcc       /LINK SHELL OK/
+FM11STMsgLink       fcc       /LINK IDLE OK/
                     fcb       $0D,$0A,$00
-FM11STMsgSLink      fcc       /SLINK SHELL OK/
+FM11STMsgSLink      fcc       /SLINK IDLE OK/
                     fcb       $0D,$0A,$00
 FM11STMsgPrcInit    fcc       /PRCINIT OK P=/
                     fcb       $00
@@ -647,12 +667,14 @@ FM11STMsgNProcOK    fcc       /NPROC OK P=/
                     fcb       $00
 FM11STMsgNProcDel   fcc       /NPROC DEL OK/
                     fcb       $0D,$0A,$00
-FM11STMsgFork       fcc       /FORK SHELL OK P=/
+FM11STMsgFork       fcc       /FORK IDLE OK P=/
+                    fcb       $00
+FM11STMsgForkNProc  fcc       /NPROC IDLE CALL P=/
                     fcb       $00
 FM11STMsgDone       fcc       /DONE/
                     fcb       $0D,$0A,$00
 
-FM11STShellName     fcs       /Shell/
+FM11STShellName     fcs       /FM11Idle/
 
 FM11STFailID        fcc       /ID FAIL E=/
                     fcb       $00
@@ -666,9 +688,9 @@ FM11STFailDelTsk    fcc       /DELTSK FAIL E=/
                     fcb       $00
 FM11STFailDelPrc    fcc       /DELPRC FAIL E=/
                     fcb       $00
-FM11STFailLink      fcc       /LINK SHELL FAIL E=/
+FM11STFailLink      fcc       /LINK IDLE FAIL E=/
                     fcb       $00
-FM11STFailSLink     fcc       /SLINK SHELL FAIL E=/
+FM11STFailSLink     fcc       /SLINK IDLE FAIL E=/
                     fcb       $00
 FM11STFailPrcInitAllPrc fcc   /PRCINIT ALLPRC FAIL E=/
                     fcb       $00
@@ -690,7 +712,9 @@ FM11STFailNProcReturn fcc     /NPROC RETURN FAIL C=/
                     fcb       $00
 FM11STFailNProcCheck fcc      /NPROC FAIL C=/
                     fcb       $00
-FM11STFailFork      fcc       /FORK SHELL FAIL E=/
+FM11STFailFork      fcc       /FORK IDLE FAIL E=/
                     fcb       $00
-FM11STFailForkCheck fcc       /FORK SHELL FAIL C=/
+FM11STFailForkCheck fcc       /FORK IDLE FAIL C=/
+                    fcb       $00
+FM11STFailForkNProcReturn fcc /NPROC IDLE RETURN FAIL C=/
                     fcb       $00
