@@ -96,6 +96,19 @@ FM11STDelPrcOK      leax      >FM11STMsgDelPrc,pcr
 FM11STLinkOK        leax      >FM11STMsgLink,pcr
                     lbsr      FM11STPutS
 
+* F$SLink: repeat the lookup through the system-state link service.
+* Do not execute or unlink the module yet; this stage isolates F$SLink.
+                    leax      >FM11STShellName,pcr
+                    ldy       <D.SysDAT
+                    lda       #Objct
+                    os9       F$SLink
+                    bcc       FM11STSLinkOK
+                    leax      >FM11STFailSLink,pcr
+                    lbra      FM11STFail
+
+FM11STSLinkOK       leax      >FM11STMsgSLink,pcr
+                    lbsr      FM11STPutS
+
                     leax      >FM11STMsgDone,pcr
                     lbsr      FM11STPutS
 FM11STDone          bra       FM11STDone
@@ -160,6 +173,8 @@ FM11STMsgDelPrc     fcc       /DELPRC OK/
                     fcb       $0D,$0A,$00
 FM11STMsgLink       fcc       /LINK SHELL OK/
                     fcb       $0D,$0A,$00
+FM11STMsgSLink      fcc       /SLINK SHELL OK/
+                    fcb       $0D,$0A,$00
 FM11STMsgDone       fcc       /DONE/
                     fcb       $0D,$0A,$00
 
@@ -178,4 +193,6 @@ FM11STFailDelTsk    fcc       /DELTSK FAIL E=/
 FM11STFailDelPrc    fcc       /DELPRC FAIL E=/
                     fcb       $00
 FM11STFailLink      fcc       /LINK SHELL FAIL E=/
+                    fcb       $00
+FM11STFailSLink     fcc       /SLINK SHELL FAIL E=/
                     fcb       $00
