@@ -1,8 +1,9 @@
 ********************************************************************
-* FM11Idle - minimal Level 2 user SWI2/F$Exit test
+* FM11Idle - minimal Level 2 user-entry test
 *
-* Issue F$Exit immediately from user state with a distinctive status.
-* The parent-side systest verifies the returned PID/status with F$Wait.
+* Print directly to the FM-11 USART before issuing any system call.
+* Reaching this message proves that the scheduler/MMU/trampoline path
+* actually transferred execution into the user task.
 ********************************************************************
 
                     nam       FM11Idle
@@ -26,9 +27,19 @@ name                fcs       /FM11Idle/
                     fcb       edition
 
 start
-                    os9       F$ID
+                    leax      >FM11IdleMsg,pcr
+FM11IdlePutS        lda       ,x+
+                    beq       FM11IdleReturned
+FM11IdlePutWait     ldb       >UART_CTRL
+                    bitb      #UART_TXRDY
+                    beq       FM11IdlePutWait
+                    sta       >UART_DATA
+                    bra       FM11IdlePutS
 
 FM11IdleReturned    bra       FM11IdleReturned
+
+FM11IdleMsg         fcc       /USER TASK RUNNING/
+                    fcb       $0D,$0A,$00
 
                     emod
 eom                 equ       *

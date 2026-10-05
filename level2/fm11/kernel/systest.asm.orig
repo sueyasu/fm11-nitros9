@@ -1,12 +1,13 @@
 ********************************************************************
-* FM-11 staged boot test #3: IOMan, /DD, then open standard device.
+* FM-11 staged boot test #4: establish the three standard paths.
 *
 * Mirrors the normal KrnP2 order:
 *   1. link/init IOMan
 *   2. I$ChgDir to Init.SysStr (normally /DD)
 *   3. I$Open Init.StdStr (normally /Term)
+*   4. save stdin and I$Dup twice for stdout/stderr
 *
-* Stop after the standard device opens successfully.
+* Stop after P$Path[0..2] have been established.
 ********************************************************************
 FM11IOManTest       lbsr      LnkIOMan
                     bcc       FM11IOManLinked
@@ -50,7 +51,28 @@ FM11STTermNameOK    leax      d,u
                     leax      >FM11STFailTermOpen,pcr
                     lbra      FM11STFail
 
-FM11STTermOK        leax      >FM11STMsgTermOpen,pcr
+FM11STTermOK        ldx       <D.Proc
+                    sta       <P$Path,x
+                    pshs      a
+                    leax      >FM11STMsgTermOpen,pcr
+                    lbsr      FM11STPutS
+                    puls      a
+
+                    os9       I$Dup
+                    bcc       FM11STDup1OK
+                    leax      >FM11STFailTermDup1,pcr
+                    lbra      FM11STFail
+FM11STDup1OK        ldx       <D.Proc
+                    sta       <P$Path+1,x
+
+                    os9       I$Dup
+                    bcc       FM11STDup2OK
+                    leax      >FM11STFailTermDup2,pcr
+                    lbra      FM11STFail
+FM11STDup2OK        ldx       <D.Proc
+                    sta       <P$Path+2,x
+
+                    leax      >FM11STMsgStdPaths,pcr
                     lbsr      FM11STPutS
                     rts
 
@@ -765,6 +787,8 @@ FM11STMsgDDChgDir   fcc       /DD CHGDIR OK/
                     fcb       $0D,$0A,$00
 FM11STMsgTermOpen   fcc       /TERM OPEN OK/
                     fcb       $0D,$0A,$00
+FM11STMsgStdPaths   fcc       /STD PATHS OK/
+                    fcb       $0D,$0A,$00
 
 FM11STShellName     fcs       /FM11Idle/
 
@@ -821,4 +845,8 @@ FM11STFailDDChgDir  fcc       /DD CHGDIR FAIL E=/
 FM11STFailTermStdStr fcc      /TERM STDSTR FAIL E=/
                     fcb       $00
 FM11STFailTermOpen  fcc       /TERM OPEN FAIL E=/
+                    fcb       $00
+FM11STFailTermDup1  fcc       /TERM DUP1 FAIL E=/
+                    fcb       $00
+FM11STFailTermDup2  fcc       /TERM DUP2 FAIL E=/
                     fcb       $00
