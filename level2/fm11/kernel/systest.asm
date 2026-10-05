@@ -109,6 +109,183 @@ FM11STLinkOK        leax      >FM11STMsgLink,pcr
 FM11STSLinkOK       leax      >FM11STMsgSLink,pcr
                     lbsr      FM11STPutS
 
+********************************************************************
+* Expanded process-descriptor initialization test.
+*
+* Model the state built by F$Fork before F$AProc:
+*   - allocate descriptor
+*   - inherit user ID and priority
+*   - install a known stack pointer and DAT image
+*   - allocate/register the software task
+*   - set parent ID and change to user state
+*
+* The process is never inserted into the active queue.
+********************************************************************
+                    os9       F$AllPrc
+                    lbcs      FM11STPrcInitAllPrcFail
+                    pshs      u
+
+* Inherit user ID and priority from the current (system) process.
+                    ldx       <D.Proc
+                    ldd       P$User,x
+                    std       P$User,u
+                    lda       P$Prior,x
+                    sta       P$Prior,u
+
+* Give the descriptor a known logical user stack pointer.  It is not
+* executed in this test.
+                    ldd       #$2000-R$Size
+                    std       P$SP,u
+
+* Use the current system DAT image as a completely defined test image.
+* This is only for registration/descriptor validation; no task switch is
+* performed.
+                    ldx       <D.SysDAT
+                    leay      P$DATImg,u
+                    ldb       #DAT.ImSz
+FM11STPrcInitDATCopy
+                    lda       ,x+
+                    sta       ,y+
+                    decb
+                    bne       FM11STPrcInitDATCopy
+
+* Register the descriptor as a software task.
+                    ldx       ,s
+                    os9       F$AllTsk
+                    lbcs      FM11STPrcInitAllTskFail
+
+* AllPrc creates the descriptor in system state.  AllTsk must not have
+* changed that state apart from clearing ImgChg.
+                    ldx       ,s
+                    lda       P$State,x
+                    cmpa      #SysState
+                    lbne      FM11STPrcInitFailState
+
+* Verify inherited user ID and priority.
+                    ldy       <D.Proc
+                    ldd       P$User,x
+                    cmpd      P$User,y
+                    lbne      FM11STPrcInitFailUser
+                    lda       P$Prior,x
+                    cmpa      P$Prior,y
+                    lbne      FM11STPrcInitFailPrior
+
+* Verify the known logical stack pointer.
+                    ldd       P$SP,x
+                    cmpd      #$2000-R$Size
+                    lbne      FM11STPrcInitFailSP
+
+* Verify that a real software task was assigned.
+                    ldb       P$Task,x
+                    lbeq      FM11STPrcInitFailTask
+
+* D.TskIPt[task] must point to this descriptor's P$DATImg.
+                    lslb
+                    ldy       <D.TskIPt
+                    ldy       b,y
+                    leau      P$DATImg,x
+                    pshs      y
+                    cmpu      ,s++
+                    lbne      FM11STPrcInitFailTskIPt
+
+* Verify that the entire DAT image survived F$AllTsk unchanged.
+                    ldy       <D.SysDAT
+                    leau      P$DATImg,x
+                    ldb       #DAT.ImSz
+FM11STPrcInitDATCmp
+                    lda       ,u+
+                    cmpa      ,y+
+                    lbne      FM11STPrcInitFailDAT
+                    decb
+                    bne       FM11STPrcInitDATCmp
+
+* Finish the descriptor state exactly as F$Fork does immediately before
+* F$AProc: establish the parent ID and switch the child out of SysState.
+                    ldy       <D.Proc
+                    lda       P$ID,y
+                    sta       P$PID,x
+                    lda       P$State,x
+                    anda      #^SysState
+                    sta       P$State,x
+
+                    lda       P$PID,x
+                    cmpa      P$ID,y
+                    lbne      FM11STPrcInitFailPID
+                    lda       P$State,x
+                    lbne      FM11STPrcInitFailUserState
+
+* Report the process and task numbers.
+                    leax      >FM11STMsgPrcInit,pcr
+                    lbsr      FM11STPutS
+                    ldx       ,s
+                    lda       P$ID,x
+                    lbsr      FM11STHexA
+                    leax      >FM11STMsgPrcInitTask,pcr
+                    lbsr      FM11STPutS
+                    ldx       ,s
+                    lda       P$Task,x
+                    lbsr      FM11STHexA
+                    lbsr      FM11STCRLF
+
+* Clean up without ever activating the process.  F$DelPrc also releases
+* its still-assigned task.
+                    ldx       ,s
+                    lda       P$ID,x
+                    leas      2,s
+                    os9       F$DelPrc
+                    lbcs      FM11STPrcInitDelPrcFail
+
+                    leax      >FM11STMsgPrcInitDel,pcr
+                    lbsr      FM11STPutS
+                    bra       FM11STPrcInitDone
+
+FM11STPrcInitAllPrcFail
+                    leax      >FM11STFailPrcInitAllPrc,pcr
+                    lbra      FM11STFail
+
+FM11STPrcInitAllTskFail
+                    leas      2,s
+                    leax      >FM11STFailPrcInitAllTsk,pcr
+                    lbra      FM11STFail
+
+FM11STPrcInitDelPrcFail
+                    leax      >FM11STFailPrcInitDelPrc,pcr
+                    lbra      FM11STFail
+
+* Internal consistency failures use a small check code rather than an
+* OS-9 error number.
+FM11STPrcInitFailState
+                    ldb       #$01
+                    bra       FM11STPrcInitCheckFail
+FM11STPrcInitFailUser
+                    ldb       #$02
+                    bra       FM11STPrcInitCheckFail
+FM11STPrcInitFailPrior
+                    ldb       #$03
+                    bra       FM11STPrcInitCheckFail
+FM11STPrcInitFailSP
+                    ldb       #$04
+                    bra       FM11STPrcInitCheckFail
+FM11STPrcInitFailTask
+                    ldb       #$05
+                    bra       FM11STPrcInitCheckFail
+FM11STPrcInitFailTskIPt
+                    ldb       #$06
+                    bra       FM11STPrcInitCheckFail
+FM11STPrcInitFailDAT
+                    ldb       #$07
+                    bra       FM11STPrcInitCheckFail
+FM11STPrcInitFailPID
+                    ldb       #$08
+                    bra       FM11STPrcInitCheckFail
+FM11STPrcInitFailUserState
+                    ldb       #$09
+FM11STPrcInitCheckFail
+                    leas      2,s
+                    leax      >FM11STFailPrcInitCheck,pcr
+                    lbra      FM11STFail
+
+FM11STPrcInitDone
                     leax      >FM11STMsgDone,pcr
                     lbsr      FM11STPutS
 FM11STDone          bra       FM11STDone
@@ -175,6 +352,12 @@ FM11STMsgLink       fcc       /LINK SHELL OK/
                     fcb       $0D,$0A,$00
 FM11STMsgSLink      fcc       /SLINK SHELL OK/
                     fcb       $0D,$0A,$00
+FM11STMsgPrcInit    fcc       /PRCINIT OK P=/
+                    fcb       $00
+FM11STMsgPrcInitTask fcc      / T=/
+                    fcb       $00
+FM11STMsgPrcInitDel fcc       /PRCINIT DEL OK/
+                    fcb       $0D,$0A,$00
 FM11STMsgDone       fcc       /DONE/
                     fcb       $0D,$0A,$00
 
@@ -195,4 +378,12 @@ FM11STFailDelPrc    fcc       /DELPRC FAIL E=/
 FM11STFailLink      fcc       /LINK SHELL FAIL E=/
                     fcb       $00
 FM11STFailSLink     fcc       /SLINK SHELL FAIL E=/
+                    fcb       $00
+FM11STFailPrcInitAllPrc fcc   /PRCINIT ALLPRC FAIL E=/
+                    fcb       $00
+FM11STFailPrcInitAllTsk fcc   /PRCINIT ALLTSK FAIL E=/
+                    fcb       $00
+FM11STFailPrcInitDelPrc fcc   /PRCINIT DELPRC FAIL E=/
+                    fcb       $00
+FM11STFailPrcInitCheck fcc    /PRCINIT FAIL C=/
                     fcb       $00
