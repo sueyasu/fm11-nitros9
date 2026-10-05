@@ -974,8 +974,10 @@ KrnSysCallSvc       ldu       <D.SysSvc ; get the system call service vector
                   ENDC
 * Copy the register stack to the process descriptor.
                   IFNE    fm11
+                    pshs      b         ; preserve user system-call function code
                     ldd       >FM11_L2_USERS ; original user S saved by fixed trampoline
                     std       P$SP,x
+                    puls      b         ; restore function code for ExecSvcCall
                   ELSE
                     sts       P$SP,x    ; save the stack pointer
                   ENDC

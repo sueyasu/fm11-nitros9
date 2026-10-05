@@ -432,24 +432,50 @@ FM11STForkOK        pshs      a
                     lbsr      FM11STCRLF
 
 ********************************************************************
-* Run the forked Shell through F$NProc.
+* User SWI2/F$Exit test.
 *
-* F$Fork left the child as the only process on D.AProcQ.  F$NProc
-* must remove it from the queue, allocate/reuse its task, make it the
-* current process, switch to the user DAT image and enter Shell.
-* F$NProc must not return to this SWI2 caller.
+* FM11Idle immediately executes F$Exit with B=$5A.  F$Wait blocks
+* this parent until the child exits, then returns child PID in A and
+* exit status in B.
 ********************************************************************
-                    leax      >FM11STMsgForkNProc,pcr
-                    lbsr      FM11STPutS
                     ldx       <D.AProcQ
                     lda       P$ID,x
+                    pshs      a
+
+                    leax      >FM11STMsgWaitCall,pcr
+                    lbsr      FM11STPutS
+                    lda       ,s
                     lbsr      FM11STHexA
                     lbsr      FM11STCRLF
 
-                    os9       F$NProc
+                    os9       F$Wait
+                    bcs       FM11STWaitFail
 
+                    cmpa      ,s
+                    bne       FM11STWaitPIDFail
+                    cmpb      #$5A
+                    bne       FM11STWaitStatusFail
+                    leas      1,s
+
+                    leax      >FM11STMsgWaitOK,pcr
+                    lbsr      FM11STPutS
+                    lbra      FM11STPrcInitDone
+
+FM11STWaitFail
+                    leas      1,s
+                    leax      >FM11STFailWait,pcr
+                    lbra      FM11STFail
+
+FM11STWaitPIDFail
+                    leas      1,s
                     ldb       #$01
-                    leax      >FM11STFailForkNProcReturn,pcr
+                    leax      >FM11STFailWaitCheck,pcr
+                    lbra      FM11STFail
+
+FM11STWaitStatusFail
+                    leas      1,s
+                    ldb       #$02
+                    leax      >FM11STFailWaitCheck,pcr
                     lbra      FM11STFail
 
 FM11STForkFailPreQueue
@@ -669,8 +695,10 @@ FM11STMsgNProcDel   fcc       /NPROC DEL OK/
                     fcb       $0D,$0A,$00
 FM11STMsgFork       fcc       /FORK IDLE OK P=/
                     fcb       $00
-FM11STMsgForkNProc  fcc       /NPROC IDLE CALL P=/
+FM11STMsgWaitCall   fcc       /WAIT IDLE CALL P=/
                     fcb       $00
+FM11STMsgWaitOK     fcc       /USER SWI2 EXIT OK/
+                    fcb       $0D,$0A,$00
 FM11STMsgDone       fcc       /DONE/
                     fcb       $0D,$0A,$00
 
@@ -716,5 +744,7 @@ FM11STFailFork      fcc       /FORK IDLE FAIL E=/
                     fcb       $00
 FM11STFailForkCheck fcc       /FORK IDLE FAIL C=/
                     fcb       $00
-FM11STFailForkNProcReturn fcc /NPROC IDLE RETURN FAIL C=/
+FM11STFailWait      fcc       /WAIT IDLE FAIL E=/
+                    fcb       $00
+FM11STFailWaitCheck fcc       /WAIT IDLE FAIL C=/
                     fcb       $00

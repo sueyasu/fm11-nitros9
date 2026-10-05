@@ -1,8 +1,8 @@
 ********************************************************************
-* FM11Idle - minimal Level 2 user-state execution test
+* FM11Idle - minimal Level 2 user SWI2/F$Exit test
 *
-* Deliberately performs no OS-9 calls and no I/O.  Once F$NProc enters
-* this module, it stays in user state until an interrupt occurs.
+* Issue F$Exit immediately from user state with a distinctive status.
+* The parent-side systest verifies the returned PID/status with F$Wait.
 ********************************************************************
 
                     nam       FM11Idle
@@ -26,7 +26,9 @@ name                fcs       /FM11Idle/
                     fcb       edition
 
 start
-                    bra       start
+                    os9       F$ID
+
+FM11IdleReturned    bra       FM11IdleReturned
 
                     emod
 eom                 equ       *
