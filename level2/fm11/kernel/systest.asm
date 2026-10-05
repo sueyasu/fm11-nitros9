@@ -275,7 +275,141 @@ FM11STPrcInitDATCmp
 
                     leax      >FM11STMsgAProcDel,pcr
                     lbsr      FM11STPutS
-                    bra       FM11STPrcInitDone
+
+********************************************************************
+* F$NProc single-service test.
+*
+* Build a second child descriptor and place it on the active queue.
+* The child remains in SysState and its local descriptor stack contains
+* a synthetic full RTI frame. F$NProc must consume that frame.
+********************************************************************
+                    os9       F$AllPrc
+                    lbcs      FM11STNProcAllPrcFail
+                    pshs      u
+
+* Inherit priority from the current system process.
+                    ldx       <D.Proc
+                    lda       P$Prior,x
+                    ldx       ,s
+                    sta       P$Prior,x
+
+* Allocate/register a software task before scheduling.
+                    os9       F$AllTsk
+                    lbcs      FM11STNProcAllTskFail
+
+* Build a complete RTI frame at the top of the descriptor's local stack.
+                    ldx       ,s
+                    leau      >P$Stack-R$Size,x
+                    stu       P$SP,x
+                    leay      ,u
+                    clra
+                    ldb       #R$Size
+FM11STNProcClrFrame
+                    sta       ,y+
+                    decb
+                    bne       FM11STNProcClrFrame
+                    lda       #Entire+IntMasks
+                    sta       R$CC,u
+                    leay      >FM11STNProcResume,pcr
+                    sty       R$PC,u
+
+* Explicitly keep this child in system state for the first NProc test.
+                    lda       P$State,x
+                    ora       #SysState
+                    sta       P$State,x
+
+* The previous AProc test restored the active queue to empty.
+                    ldd       <D.AProcQ
+                    lbne      FM11STNProcFailPreQueue
+
+                    os9       F$AProc
+
+                    leax      >FM11STMsgNProcCall,pcr
+                    lbsr      FM11STPutS
+                    ldx       ,s
+                    lda       P$ID,x
+                    lbsr      FM11STHexA
+                    leax      >FM11STMsgNProcTask,pcr
+                    lbsr      FM11STPutS
+                    ldx       ,s
+                    lda       P$Task,x
+                    lbsr      FM11STHexA
+                    lbsr      FM11STCRLF
+
+* F$NProc does not return through this caller's SWI2 frame.
+                    leas      2,s
+                    os9       F$NProc
+
+                    ldb       #$01
+                    leax      >FM11STFailNProcReturn,pcr
+                    lbra      FM11STFail
+
+* Reached only through the synthetic RTI frame in P$SP.
+FM11STNProcResume
+                    ldx       <D.Proc
+                    cmpx      <D.SysPrc
+                    lbeq      FM11STNProcFailCurrent
+
+                    ldd       <D.AProcQ
+                    lbne      FM11STNProcFailQueue
+                    ldd       P$Queue,x
+                    lbne      FM11STNProcFailLink
+
+                    ldb       <D.Slice
+                    cmpb      <D.TSlice
+                    lbne      FM11STNProcFailSlice
+
+                    leax      >FM11STMsgNProcOK,pcr
+                    lbsr      FM11STPutS
+                    ldx       <D.Proc
+                    lda       P$ID,x
+                    lbsr      FM11STHexA
+                    lbsr      FM11STCRLF
+
+* Save child PID, restore the real system process/stack, then delete child.
+                    ldx       <D.Proc
+                    lda       P$ID,x
+                    ldu       <D.SysPrc
+                    stu       <D.Proc
+                    lds       <D.SysStk
+                    os9       F$DelPrc
+                    lbcs      FM11STNProcDelPrcFail
+
+                    leax      >FM11STMsgNProcDel,pcr
+                    lbsr      FM11STPutS
+                    lbra       FM11STPrcInitDone
+
+FM11STNProcAllPrcFail
+                    leax      >FM11STFailNProcAllPrc,pcr
+                    lbra      FM11STFail
+
+FM11STNProcAllTskFail
+                    leas      2,s
+                    leax      >FM11STFailNProcAllTsk,pcr
+                    lbra      FM11STFail
+
+FM11STNProcDelPrcFail
+                    leax      >FM11STFailNProcDelPrc,pcr
+                    lbra      FM11STFail
+
+FM11STNProcFailPreQueue
+                    ldb       #$01
+                    bra       FM11STNProcCheckFail
+FM11STNProcFailCurrent
+                    ldb       #$02
+                    bra       FM11STNProcCheckFail
+FM11STNProcFailQueue
+                    ldb       #$03
+                    bra       FM11STNProcCheckFail
+FM11STNProcFailLink
+                    ldb       #$04
+                    bra       FM11STNProcCheckFail
+FM11STNProcFailSlice
+                    ldb       #$05
+FM11STNProcCheckFail
+                    leax      >FM11STFailNProcCheck,pcr
+                    lbra      FM11STFail
+
 
 FM11STPrcInitAllPrcFail
                     leax      >FM11STFailPrcInitAllPrc,pcr
@@ -414,6 +548,14 @@ FM11STMsgAProc      fcc       /APROC OK P=/
                     fcb       $00
 FM11STMsgAProcDel   fcc       /APROC DEL OK/
                     fcb       $0D,$0A,$00
+FM11STMsgNProcCall  fcc       /NPROC CALL P=/
+                    fcb       $00
+FM11STMsgNProcTask  fcc       / T=/
+                    fcb       $00
+FM11STMsgNProcOK    fcc       /NPROC OK P=/
+                    fcb       $00
+FM11STMsgNProcDel   fcc       /NPROC DEL OK/
+                    fcb       $0D,$0A,$00
 FM11STMsgDone       fcc       /DONE/
                     fcb       $0D,$0A,$00
 
@@ -444,4 +586,14 @@ FM11STFailPrcInitDelPrc fcc   /PRCINIT DELPRC FAIL E=/
 FM11STFailPrcInitCheck fcc    /PRCINIT FAIL C=/
                     fcb       $00
 FM11STFailAProcCheck fcc      /APROC FAIL C=/
+                    fcb       $00
+FM11STFailNProcAllPrc fcc     /NPROC ALLPRC FAIL E=/
+                    fcb       $00
+FM11STFailNProcAllTsk fcc     /NPROC ALLTSK FAIL E=/
+                    fcb       $00
+FM11STFailNProcDelPrc fcc     /NPROC DELPRC FAIL E=/
+                    fcb       $00
+FM11STFailNProcReturn fcc     /NPROC RETURN FAIL C=/
+                    fcb       $00
+FM11STFailNProcCheck fcc      /NPROC FAIL C=/
                     fcb       $00
