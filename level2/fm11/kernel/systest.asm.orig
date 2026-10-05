@@ -377,98 +377,7 @@ FM11STNProcResume
 
                     leax      >FM11STMsgNProcDel,pcr
                     lbsr      FM11STPutS
-
-********************************************************************
-* F$Fork single-service test.
-*
-* Fork the resident Shell module but do not schedule it.  This tests
-* child construction and active-queue insertion only.
-********************************************************************
-                    ldd       <D.AProcQ
-                    lbne      FM11STForkFailPreQueue
-
-                    leax      >FM11STShellName,pcr
-                    lda       #Objct
-                    clrb
-                    ldy       #$0000
-                    os9       F$Fork
-                    bcc       FM11STForkOK
-                    leax      >FM11STFailFork,pcr
-                    lbra      FM11STFail
-
-FM11STForkOK        pshs      a
-
-* The forked child must be the only active process.
-                    ldx       <D.AProcQ
-                    lbeq      FM11STForkFailQueue
-                    cmpa      P$ID,x
-                    lbne      FM11STForkFailPID
-                    ldd       P$Queue,x
-                    lbne      FM11STForkFailNext
-
-* Verify parent/child linkage.
-                    ldy       <D.SysPrc
-                    lda       P$PID,x
-                    cmpa      P$ID,y
-                    lbne      FM11STForkFailParent
-                    lda       P$CID,y
-                    cmpa      P$ID,x
-                    lbne      FM11STForkFailChild
-
-* Child is ready for user-state scheduling.  F$Fork releases its temporary
-* task before placing the child on the active queue.
-                    lda       P$State,x
-                    bita      #SysState
-                    lbne      FM11STForkFailState
-                    ldd       P$PModul,x
-                    lbeq      FM11STForkFailModule
-                    lda       P$Task,x
-                    lbne      FM11STForkFailTask
-
-                    leax      >FM11STMsgFork,pcr
-                    lbsr      FM11STPutS
-                    puls      a
-                    lbsr      FM11STHexA
-                    lbsr      FM11STCRLF
                     lbra       FM11STPrcInitDone
-
-FM11STForkFailPreQueue
-                    ldb       #$01
-                    bra       FM11STForkCheckFail
-FM11STForkFailQueue
-                    leas      1,s
-                    ldb       #$02
-                    bra       FM11STForkCheckFail
-FM11STForkFailPID
-                    leas      1,s
-                    ldb       #$03
-                    bra       FM11STForkCheckFail
-FM11STForkFailNext
-                    leas      1,s
-                    ldb       #$04
-                    bra       FM11STForkCheckFail
-FM11STForkFailParent
-                    leas      1,s
-                    ldb       #$05
-                    bra       FM11STForkCheckFail
-FM11STForkFailChild
-                    leas      1,s
-                    ldb       #$06
-                    bra       FM11STForkCheckFail
-FM11STForkFailState
-                    leas      1,s
-                    ldb       #$07
-                    bra       FM11STForkCheckFail
-FM11STForkFailModule
-                    leas      1,s
-                    ldb       #$08
-                    bra       FM11STForkCheckFail
-FM11STForkFailTask
-                    leas      1,s
-                    ldb       #$09
-FM11STForkCheckFail
-                    leax      >FM11STFailForkCheck,pcr
-                    lbra      FM11STFail
 
 FM11STNProcAllPrcFail
                     leax      >FM11STFailNProcAllPrc,pcr
@@ -647,8 +556,6 @@ FM11STMsgNProcOK    fcc       /NPROC OK P=/
                     fcb       $00
 FM11STMsgNProcDel   fcc       /NPROC DEL OK/
                     fcb       $0D,$0A,$00
-FM11STMsgFork       fcc       /FORK SHELL OK P=/
-                    fcb       $00
 FM11STMsgDone       fcc       /DONE/
                     fcb       $0D,$0A,$00
 
@@ -689,8 +596,4 @@ FM11STFailNProcDelPrc fcc     /NPROC DELPRC FAIL E=/
 FM11STFailNProcReturn fcc     /NPROC RETURN FAIL C=/
                     fcb       $00
 FM11STFailNProcCheck fcc      /NPROC FAIL C=/
-                    fcb       $00
-FM11STFailFork      fcc       /FORK SHELL FAIL E=/
-                    fcb       $00
-FM11STFailForkCheck fcc       /FORK SHELL FAIL C=/
                     fcb       $00
