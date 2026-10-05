@@ -79,7 +79,7 @@ build_one() {
     # External commands used for bring-up and scheduler/IRQ testing.
     build "$ROOT/level1/cmds/dir.asm"            dir
     build "$ROOT/level1/cmds/sleep.asm"          sleep
-    build "$ROOT/level2/cmds/procs.asm"          procs
+    build "$ROOT/level1/cmds/procs.asm"          procs
     build "$ROOT/level1/cmds/date.asm"           date
 
     BOOTLIST="$FM/bootlists/bootlist.2d"
