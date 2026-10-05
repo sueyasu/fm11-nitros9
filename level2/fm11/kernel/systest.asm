@@ -57,7 +57,32 @@ FM11STTskOK         puls      x
                     lda       P$Task,x
                     lbsr      FM11STHexA
                     lbsr      FM11STCRLF
-                    puls      x
+
+* F$DelTsk: release the task again while leaving the process descriptor.
+* Save the process ID for the following F$DelPrc test.
+                    ldx       ,s
+                    lda       P$ID,x
+                    pshs      a
+                    os9       F$DelTsk
+                    bcc       FM11STDelTskOK
+                    leas      3,s
+                    leax      >FM11STFailDelTsk,pcr
+                    lbra      FM11STFail
+
+FM11STDelTskOK      leax      >FM11STMsgDelTsk,pcr
+                    lbsr      FM11STPutS
+
+* F$DelPrc: release the process descriptor.  Its task is already zero,
+* so the internal F$DelTsk performed by F$DelPrc is a no-op.
+                    puls      a
+                    leas      2,s
+                    os9       F$DelPrc
+                    bcc       FM11STDelPrcOK
+                    leax      >FM11STFailDelPrc,pcr
+                    lbra      FM11STFail
+
+FM11STDelPrcOK      leax      >FM11STMsgDelPrc,pcr
+                    lbsr      FM11STPutS
 
                     leax      >FM11STMsgDone,pcr
                     lbsr      FM11STPutS
@@ -117,6 +142,10 @@ FM11STMsgPrc        fcc       /ALLPRC OK P=/
                     fcb       $00
 FM11STMsgTsk        fcc       /ALLTSK OK T=/
                     fcb       $00
+FM11STMsgDelTsk     fcc       /DELTSK OK/
+                    fcb       $0D,$0A,$00
+FM11STMsgDelPrc     fcc       /DELPRC OK/
+                    fcb       $0D,$0A,$00
 FM11STMsgDone       fcc       /DONE/
                     fcb       $0D,$0A,$00
 
@@ -127,4 +156,8 @@ FM11STFailMem       fcc       /SRQMEM FAIL E=/
 FM11STFailPrc       fcc       /ALLPRC FAIL E=/
                     fcb       $00
 FM11STFailTsk       fcc       /ALLTSK FAIL E=/
+                    fcb       $00
+FM11STFailDelTsk    fcc       /DELTSK FAIL E=/
+                    fcb       $00
+FM11STFailDelPrc    fcc       /DELPRC FAIL E=/
                     fcb       $00
