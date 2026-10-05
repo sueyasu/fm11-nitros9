@@ -84,6 +84,18 @@ FM11STDelTskOK      leax      >FM11STMsgDelTsk,pcr
 FM11STDelPrcOK      leax      >FM11STMsgDelPrc,pcr
                     lbsr      FM11STPutS
 
+* F$Link: link the resident Shell module only.  Do not execute it and do
+* not call F$UnLink yet; this stage isolates F$Link itself.
+                    leax      >FM11STShellName,pcr
+                    lda       #Objct
+                    os9       F$Link
+                    bcc       FM11STLinkOK
+                    leax      >FM11STFailLink,pcr
+                    lbra      FM11STFail
+
+FM11STLinkOK        leax      >FM11STMsgLink,pcr
+                    lbsr      FM11STPutS
+
                     leax      >FM11STMsgDone,pcr
                     lbsr      FM11STPutS
 FM11STDone          bra       FM11STDone
@@ -146,8 +158,12 @@ FM11STMsgDelTsk     fcc       /DELTSK OK/
                     fcb       $0D,$0A,$00
 FM11STMsgDelPrc     fcc       /DELPRC OK/
                     fcb       $0D,$0A,$00
+FM11STMsgLink       fcc       /LINK SHELL OK/
+                    fcb       $0D,$0A,$00
 FM11STMsgDone       fcc       /DONE/
                     fcb       $0D,$0A,$00
+
+FM11STShellName     fcs       /Shell/
 
 FM11STFailID        fcc       /ID FAIL E=/
                     fcb       $00
@@ -160,4 +176,6 @@ FM11STFailTsk       fcc       /ALLTSK FAIL E=/
 FM11STFailDelTsk    fcc       /DELTSK FAIL E=/
                     fcb       $00
 FM11STFailDelPrc    fcc       /DELPRC FAIL E=/
+                    fcb       $00
+FM11STFailLink      fcc       /LINK SHELL FAIL E=/
                     fcb       $00
