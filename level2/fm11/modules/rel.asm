@@ -96,10 +96,10 @@ ClearDP             sta       ,x+
                     inc       <D.MDREG
                   ENDC
 
-                    lda       #$7E
+* Disable normal boot diagnostics.  All common loader/kernel progress
+* output goes through D.BtBug, so an RTS here keeps normal boot silent.
+                    lda       #$39
                     sta       <D.BtBug
-                    leax      <BtDebug,pcr
-                    stx       <D.BtBug+1
 
                     lda       #$7E
                     sta       <D.Crash
@@ -131,7 +131,7 @@ BtDebugWait         ldb       >UART_CTRL
                     puls      cc,b,pc
 
 Crash               lda       #'!
-                    jsr       <D.BtBug
+                    bsr       BtDebug
 CrashLoop           bra       CrashLoop
 
 Filler              fill      $00,$130-XX.Size-3-*
