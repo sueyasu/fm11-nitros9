@@ -1,11 +1,12 @@
 ********************************************************************
-* FM-11 staged boot test #2: IOMan, then change to system device.
+* FM-11 staged boot test #3: IOMan, /DD, then open standard device.
 *
 * Mirrors the normal KrnP2 order:
 *   1. link/init IOMan
 *   2. I$ChgDir to Init.SysStr (normally /DD)
+*   3. I$Open Init.StdStr (normally /Term)
 *
-* Stop before opening Init.StdStr (/Term).
+* Stop after the standard device opens successfully.
 ********************************************************************
 FM11IOManTest       lbsr      LnkIOMan
                     bcc       FM11IOManLinked
@@ -33,6 +34,23 @@ FM11STDDNameOK      leax      d,u
                     lbra      FM11STFail
 
 FM11STDDOK          leax      >FM11STMsgDDChgDir,pcr
+                    lbsr      FM11STPutS
+
+                    ldu       <D.Init
+                    ldd       <StdStr,u
+                    bne       FM11STTermNameOK
+                    clrb
+                    leax      >FM11STFailTermStdStr,pcr
+                    lbra      FM11STFail
+
+FM11STTermNameOK    leax      d,u
+                    lda       #UPDAT.
+                    os9       I$Open
+                    bcc       FM11STTermOK
+                    leax      >FM11STFailTermOpen,pcr
+                    lbra      FM11STFail
+
+FM11STTermOK        leax      >FM11STMsgTermOpen,pcr
                     lbsr      FM11STPutS
                     rts
 
@@ -745,6 +763,8 @@ FM11STMsgIOManInit  fcc       /IOMAN INIT OK/
                     fcb       $0D,$0A,$00
 FM11STMsgDDChgDir   fcc       /DD CHGDIR OK/
                     fcb       $0D,$0A,$00
+FM11STMsgTermOpen   fcc       /TERM OPEN OK/
+                    fcb       $0D,$0A,$00
 
 FM11STShellName     fcs       /FM11Idle/
 
@@ -797,4 +817,8 @@ FM11STFailIOManLink fcc       /IOMAN LINK FAIL E=/
 FM11STFailDDSysStr  fcc       /DD SYSSTR FAIL E=/
                     fcb       $00
 FM11STFailDDChgDir  fcc       /DD CHGDIR FAIL E=/
+                    fcb       $00
+FM11STFailTermStdStr fcc      /TERM STDSTR FAIL E=/
+                    fcb       $00
+FM11STFailTermOpen  fcc       /TERM OPEN FAIL E=/
                     fcb       $00
