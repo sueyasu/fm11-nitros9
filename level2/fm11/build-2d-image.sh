@@ -82,6 +82,17 @@ build_one() {
     build "$ROOT/level2/cmds/procs.asm"          procs
     build "$ROOT/level1/cmds/date.asm"           date
 
+    # Basic disk/file utilities.  These are kept out of OS9Boot and installed
+    # only in /DD/CMDS so the boot module set remains small.
+    build "$ROOT/level1/cmds/copy.asm"           copy
+    build "$ROOT/level1/cmds/dsave.asm"          dsave
+    build "$ROOT/level1/cmds/cmp.asm"            cmp
+    build "$ROOT/level1/cmds/makdir.asm"         makdir
+    build "$ROOT/level1/cmds/del.asm"            del
+    build "$ROOT/level1/cmds/attr.asm"           attr
+    build "$ROOT/level1/cmds/list.asm"           list
+    build "$ROOT/level1/cmds/free.asm"           free
+
     BOOTLIST="$FM/bootlists/bootlist.2d"
     OS9BOOT="$OUT/OS9Boot-2d"
     : > "$OS9BOOT"
@@ -121,6 +132,21 @@ build_one() {
     os9 attr "$RBF,CMDS/Procs" -e -pe >/dev/null
     os9 copy -o=0 "$OUT/date" "$RBF,CMDS/Date"
     os9 attr "$RBF,CMDS/Date" -e -pe >/dev/null
+
+    for cmd in copy dsave cmp makdir del attr list free; do
+        case "$cmd" in
+            copy)   diskname=Copy ;;
+            dsave)  diskname=DSave ;;
+            cmp)    diskname=Cmp ;;
+            makdir) diskname=MakDir ;;
+            del)    diskname=Del ;;
+            attr)   diskname=Attr ;;
+            list)   diskname=List ;;
+            free)   diskname=Free ;;
+        esac
+        os9 copy -o=0 "$OUT/$cmd" "$RBF,CMDS/$diskname"
+        os9 attr "$RBF,CMDS/$diskname" -e -pe >/dev/null
+    done
 
     # Boot_common follows DD.BT to the /OS9Boot file descriptor.
     python3 "$ROOT/patch-boot-descriptor.py" "$RBF"
