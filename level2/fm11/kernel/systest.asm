@@ -227,15 +227,53 @@ FM11STPrcInitDATCmp
                     lbsr      FM11STHexA
                     lbsr      FM11STCRLF
 
-* Clean up without ever activating the process.  F$DelPrc also releases
-* its still-assigned task.
+* F$AProc single-service test.  At this early boot point the active queue
+* must still be empty; require that so insertion and removal are unambiguous.
+                    ldd       <D.AProcQ
+                    lbne      FM11STAProcFailPreQueue
+
+                    ldx       ,s
+                    os9       F$AProc
+
+* With an initially empty queue, the new descriptor must be the head,
+* its next pointer must be zero, and F$AProc must copy priority to age.
+                    ldx       ,s
+                    cmpx      <D.AProcQ
+                    lbne      FM11STAProcFailHead
+                    ldd       P$Queue,x
+                    lbne      FM11STAProcFailNext
+                    lda       P$Age,x
+                    cmpa      P$Prior,x
+                    lbne      FM11STAProcFailAge
+
+                    leax      >FM11STMsgAProc,pcr
+                    lbsr      FM11STPutS
+                    ldx       ,s
+                    lda       P$ID,x
+                    lbsr      FM11STHexA
+                    lbsr      FM11STCRLF
+
+* Remove the test process from the active queue without scheduling it.
+* The queue was required to be empty before insertion, so restoring the
+* head to zero exactly restores its original state.
+                    pshs      cc
+                    orcc      #IntMasks
+                    ldx       1,s
+                    clra
+                    clrb
+                    std       <D.AProcQ
+                    std       P$Queue,x
+                    puls      cc
+
+* Now the descriptor is no longer queued and can be deleted safely.
+* F$DelPrc also releases its still-assigned task.
                     ldx       ,s
                     lda       P$ID,x
                     leas      2,s
                     os9       F$DelPrc
                     lbcs      FM11STPrcInitDelPrcFail
 
-                    leax      >FM11STMsgPrcInitDel,pcr
+                    leax      >FM11STMsgAProcDel,pcr
                     lbsr      FM11STPutS
                     bra       FM11STPrcInitDone
 
@@ -250,6 +288,22 @@ FM11STPrcInitAllTskFail
 
 FM11STPrcInitDelPrcFail
                     leax      >FM11STFailPrcInitDelPrc,pcr
+                    lbra      FM11STFail
+
+FM11STAProcFailPreQueue
+                    ldb       #$01
+                    bra       FM11STAProcCheckFail
+FM11STAProcFailHead
+                    ldb       #$02
+                    bra       FM11STAProcCheckFail
+FM11STAProcFailNext
+                    ldb       #$03
+                    bra       FM11STAProcCheckFail
+FM11STAProcFailAge
+                    ldb       #$04
+FM11STAProcCheckFail
+                    leas      2,s
+                    leax      >FM11STFailAProcCheck,pcr
                     lbra      FM11STFail
 
 * Internal consistency failures use a small check code rather than an
@@ -356,7 +410,9 @@ FM11STMsgPrcInit    fcc       /PRCINIT OK P=/
                     fcb       $00
 FM11STMsgPrcInitTask fcc      / T=/
                     fcb       $00
-FM11STMsgPrcInitDel fcc       /PRCINIT DEL OK/
+FM11STMsgAProc      fcc       /APROC OK P=/
+                    fcb       $00
+FM11STMsgAProcDel   fcc       /APROC DEL OK/
                     fcb       $0D,$0A,$00
 FM11STMsgDone       fcc       /DONE/
                     fcb       $0D,$0A,$00
@@ -386,4 +442,6 @@ FM11STFailPrcInitAllTsk fcc   /PRCINIT ALLTSK FAIL E=/
 FM11STFailPrcInitDelPrc fcc   /PRCINIT DELPRC FAIL E=/
                     fcb       $00
 FM11STFailPrcInitCheck fcc    /PRCINIT FAIL C=/
+                    fcb       $00
+FM11STFailAProcCheck fcc      /APROC FAIL C=/
                     fcb       $00
