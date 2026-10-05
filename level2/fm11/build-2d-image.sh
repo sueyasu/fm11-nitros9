@@ -76,6 +76,9 @@ build_one() {
     # also install it in /DD/CMDS.
     build "$ROOT/level1/cmds/shell_21.asm"       shell
 
+    # Stage 7 external-command test.
+    build "$ROOT/level1/cmds/dir.asm"            dir
+
     BOOTLIST="$FM/bootlists/bootlist.2d"
     OS9BOOT="$OUT/OS9Boot-2d"
     : > "$OS9BOOT"
@@ -107,6 +110,8 @@ build_one() {
     os9 makdir "$RBF,CMDS"
     os9 copy -o=0 "$OUT/shell" "$RBF,CMDS/Shell"
     os9 attr "$RBF,CMDS/Shell" -e -pe >/dev/null
+    os9 copy -o=0 "$OUT/dir" "$RBF,CMDS/Dir"
+    os9 attr "$RBF,CMDS/Dir" -e -pe >/dev/null
 
     # Boot_common follows DD.BT to the /OS9Boot file descriptor.
     python3 "$ROOT/patch-boot-descriptor.py" "$RBF"
