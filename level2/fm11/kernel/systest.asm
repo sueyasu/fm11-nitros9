@@ -1,0 +1,130 @@
+********************************************************************
+* FM11SysTest - minimal Level 2 system-call self-test
+*
+* Runs in KrnP2 system state.  It deliberately does not activate or
+* schedule the process/task allocated by F$AllPrc/F$AllTsk.
+********************************************************************
+
+FM11SysTest
+                    leax      >FM11STMsgStart,pcr
+                    lbsr      FM11STPutS
+
+* F$ID: simplest non-I/O service.
+                    os9       F$ID
+                    bcc       FM11STIDOK
+                    leax      >FM11STFailID,pcr
+                    lbra      FM11STFail
+FM11STIDOK          leax      >FM11STMsgID,pcr
+                    lbsr      FM11STPutS
+
+* F$SRqMem: allocate one 256-byte system page.  Intentionally left
+* allocated because this diagnostic halts immediately after the test.
+                    ldd       #$0100
+                    os9       F$SRqMem
+                    bcc       FM11STMemOK
+                    leax      >FM11STFailMem,pcr
+                    lbra      FM11STFail
+FM11STMemOK         leax      >FM11STMsgMem,pcr
+                    lbsr      FM11STPutS
+
+* F$AllPrc: allocate a process descriptor but do not activate it.
+                    os9       F$AllPrc
+                    bcc       FM11STPrcOK
+                    leax      >FM11STFailPrc,pcr
+                    lbra      FM11STFail
+FM11STPrcOK         pshs      u
+                    leax      >FM11STMsgPrc,pcr
+                    lbsr      FM11STPutS
+                    ldx       ,s
+                    lda       P$ID,x
+                    lbsr      FM11STHexA
+                    lbsr      FM11STCRLF
+
+* F$AllTsk: assign/register a software task for the new descriptor.
+* No F$AProc/F$NProc/F$Fork follows; the task is never executed.
+                    ldx       ,s
+                    os9       F$AllTsk
+                    bcc       FM11STTskOK
+                    leas      2,s
+                    leax      >FM11STFailTsk,pcr
+                    lbra      FM11STFail
+
+FM11STTskOK         puls      x
+                    pshs      x
+                    leax      >FM11STMsgTsk,pcr
+                    lbsr      FM11STPutS
+                    ldx       ,s
+                    lda       P$Task,x
+                    lbsr      FM11STHexA
+                    lbsr      FM11STCRLF
+                    puls      x
+
+                    leax      >FM11STMsgDone,pcr
+                    lbsr      FM11STPutS
+FM11STDone          bra       FM11STDone
+
+* X -> NUL terminated string.  Clobbers A/X.
+FM11STPutS          lda       ,x+
+                    beq       FM11STPutSRet
+                    lbsr      FM11STPutC
+                    bra       FM11STPutS
+FM11STPutSRet       rts
+
+* A = character.  Preserve character while polling the USART.
+FM11STPutC          pshs      a
+FM11STPutCWait      lda       >UART_CTRL
+                    bita      #UART_TXRDY
+                    beq       FM11STPutCWait
+                    puls      a
+                    sta       >UART_DATA
+                    rts
+
+FM11STCRLF          lda       #$0D
+                    lbsr      FM11STPutC
+                    lda       #$0A
+                    lbra      FM11STPutC
+
+* A = byte to print as two uppercase hex digits.
+FM11STHexA          pshs      a
+                    lsra
+                    lsra
+                    lsra
+                    lsra
+                    lbsr      FM11STHexNib
+                    puls      a
+                    anda      #$0F
+FM11STHexNib        adda      #'0
+                    cmpa      #'9
+                    bls       FM11STHexOut
+                    adda      #7
+FM11STHexOut        lbra      FM11STPutC
+
+* X -> failure prefix, B = OS-9 error code.
+FM11STFail          pshs      b
+                    lbsr      FM11STPutS
+                    puls      a
+                    lbsr      FM11STHexA
+                    lbsr      FM11STCRLF
+FM11STFailStop      bra       FM11STFailStop
+
+FM11STMsgStart      fcc       /SYSTEST START/
+                    fcb       $0D,$0A,$00
+FM11STMsgID         fcc       /ID OK/
+                    fcb       $0D,$0A,$00
+FM11STMsgMem        fcc       /SRQMEM OK/
+                    fcb       $0D,$0A,$00
+FM11STMsgPrc        fcc       /ALLPRC OK P=/
+                    fcb       $00
+FM11STMsgTsk        fcc       /ALLTSK OK T=/
+                    fcb       $00
+FM11STMsgDone       fcc       /DONE/
+                    fcb       $0D,$0A,$00
+
+FM11STFailID        fcc       /ID FAIL E=/
+                    fcb       $00
+FM11STFailMem       fcc       /SRQMEM FAIL E=/
+                    fcb       $00
+FM11STFailPrc       fcc       /ALLPRC FAIL E=/
+                    fcb       $00
+FM11STFailTsk       fcc       /ALLTSK FAIL E=/
+                    fcb       $00
