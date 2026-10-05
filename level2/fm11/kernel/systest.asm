@@ -1,8 +1,11 @@
 ********************************************************************
-* FM-11 staged boot test #1: link and initialize IOMan only.
+* FM-11 staged boot test #2: IOMan, then change to system device.
 *
-* Mirrors GetIOMan's normal LnkIOMan -> jsr ,y initialization, but
-* stops before dispatching any I/O service.
+* Mirrors the normal KrnP2 order:
+*   1. link/init IOMan
+*   2. I$ChgDir to Init.SysStr (normally /DD)
+*
+* Stop before opening Init.StdStr (/Term).
 ********************************************************************
 FM11IOManTest       lbsr      LnkIOMan
                     bcc       FM11IOManLinked
@@ -13,6 +16,23 @@ FM11IOManLinked     leax      >FM11STMsgIOManLink,pcr
                     lbsr      FM11STPutS
                     jsr       ,y
                     leax      >FM11STMsgIOManInit,pcr
+                    lbsr      FM11STPutS
+
+                    ldu       <D.Init
+                    ldd       SysStr,u
+                    bne       FM11STDDNameOK
+                    clrb
+                    leax      >FM11STFailDDSysStr,pcr
+                    lbra      FM11STFail
+
+FM11STDDNameOK      leax      d,u
+                    lda       #(EXEC.+READ.)
+                    os9       I$ChgDir
+                    bcc       FM11STDDOK
+                    leax      >FM11STFailDDChgDir,pcr
+                    lbra      FM11STFail
+
+FM11STDDOK          leax      >FM11STMsgDDChgDir,pcr
                     lbsr      FM11STPutS
                     rts
 
@@ -723,6 +743,8 @@ FM11STMsgIOManLink  fcc       /IOMAN LINK OK/
                     fcb       $0D,$0A,$00
 FM11STMsgIOManInit  fcc       /IOMAN INIT OK/
                     fcb       $0D,$0A,$00
+FM11STMsgDDChgDir   fcc       /DD CHGDIR OK/
+                    fcb       $0D,$0A,$00
 
 FM11STShellName     fcs       /FM11Idle/
 
@@ -771,4 +793,8 @@ FM11STFailWait      fcc       /WAIT IDLE FAIL E=/
 FM11STFailWaitCheck fcc       /WAIT IDLE FAIL C=/
                     fcb       $00
 FM11STFailIOManLink fcc       /IOMAN LINK FAIL E=/
+                    fcb       $00
+FM11STFailDDSysStr  fcc       /DD SYSSTR FAIL E=/
+                    fcb       $00
+FM11STFailDDChgDir  fcc       /DD CHGDIR FAIL E=/
                     fcb       $00
