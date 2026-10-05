@@ -222,9 +222,8 @@ krnp2
                   ENDC
                     os9       F$SSvc    ; call OS-9 service F$SSvc
                   IFNE    fm11
-* l2-bugfix: stop normal boot here and run the system-call self-test.
-                    lbsr      FM11SysTest
-FM11SysTestStop     bra       FM11SysTestStop
+                    lbsr      FM11IOManTest
+FM11IOManTestStop   bra       FM11IOManTestStop
                   ENDC
                   IFEQ    TC9-1   ; begin conditional assembly for TC9-1
                     leax      Trap,pc   ; compute Trap,pc into X

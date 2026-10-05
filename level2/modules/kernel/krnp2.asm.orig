@@ -221,6 +221,27 @@ krnp2
                     leay      SvcTab,pc ; install system calls
                   ENDC
                     os9       F$SSvc    ; call OS-9 service F$SSvc
+                  IFNE    fm11
+********************************************************************
+* FM-11 staged boot test #1: link and initialize IOMan only.
+*
+* This mirrors GetIOMan's normal LnkIOMan -> jsr ,y initialization,
+* but deliberately stops before dispatching any I/O service.  SCF,
+* RBF, device descriptors and SysGo are not exercised yet.
+********************************************************************
+                    lbsr      LnkIOMan
+                    bcc       FM11IOManLinked
+                    leax      >FM11STFailIOManLink,pcr
+                    lbra      FM11STFail
+
+FM11IOManLinked     leax      >FM11STMsgIOManLink,pcr
+                    lbsr      FM11STPutS
+                    jsr       ,y
+
+                    leax      >FM11STMsgIOManInit,pcr
+                    lbsr      FM11STPutS
+FM11IOManTestStop   bra       FM11IOManTestStop
+                  ENDC
                   IFEQ    TC9-1   ; begin conditional assembly for TC9-1
                     leax      Trap,pc   ; compute Trap,pc into X
                     stx       <D.SWI    ; store X at <D.SWI
@@ -500,6 +521,9 @@ NotRAMTbl           fcb       $C0,$10   ; $C0-$CF: sectored I/O pages $C0-$C7, n
                     fcb       $00,$00   ; end
                   ENDC
 *]]] Wildbits PORT
+                  IFNE    fm11
+                    use       systest.asm
+                  ENDC
                     emod
 eom                 equ       *         ; define assembler symbol eom
                     end

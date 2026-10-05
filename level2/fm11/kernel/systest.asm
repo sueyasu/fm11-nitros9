@@ -1,4 +1,22 @@
 ********************************************************************
+* FM-11 staged boot test #1: link and initialize IOMan only.
+*
+* Mirrors GetIOMan's normal LnkIOMan -> jsr ,y initialization, but
+* stops before dispatching any I/O service.
+********************************************************************
+FM11IOManTest       lbsr      LnkIOMan
+                    bcc       FM11IOManLinked
+                    leax      >FM11STFailIOManLink,pcr
+                    lbra      FM11STFail
+
+FM11IOManLinked     leax      >FM11STMsgIOManLink,pcr
+                    lbsr      FM11STPutS
+                    jsr       ,y
+                    leax      >FM11STMsgIOManInit,pcr
+                    lbsr      FM11STPutS
+                    rts
+
+********************************************************************
 * FM11SysTest - minimal Level 2 system-call self-test
 *
 * Runs in KrnP2 system state.  It deliberately does not activate or
@@ -701,6 +719,10 @@ FM11STMsgWaitOK     fcc       /USER SWI2 EXIT OK/
                     fcb       $0D,$0A,$00
 FM11STMsgDone       fcc       /DONE/
                     fcb       $0D,$0A,$00
+FM11STMsgIOManLink  fcc       /IOMAN LINK OK/
+                    fcb       $0D,$0A,$00
+FM11STMsgIOManInit  fcc       /IOMAN INIT OK/
+                    fcb       $0D,$0A,$00
 
 FM11STShellName     fcs       /FM11Idle/
 
@@ -747,4 +769,6 @@ FM11STFailForkCheck fcc       /FORK IDLE FAIL C=/
 FM11STFailWait      fcc       /WAIT IDLE FAIL E=/
                     fcb       $00
 FM11STFailWaitCheck fcc       /WAIT IDLE FAIL C=/
+                    fcb       $00
+FM11STFailIOManLink fcc       /IOMAN LINK FAIL E=/
                     fcb       $00
