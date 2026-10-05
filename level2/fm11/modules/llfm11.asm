@@ -1,9 +1,10 @@
 ********************************************************************
 * llfm11 - FM-11 Level 2 low-level 2D floppy driver for RBSuper
 *
-* Initial Level 2 implementation deliberately uses MiniFDC PIO rather
-* than DMA.  DMA sees physical memory while RBSuper buffers are Level 2
-* logical addresses, so passing V.CchPSpot directly to DMA is unsafe.
+* The 2D MiniFDC normally uses DMA0.  RBSuper buffer pointers are Level 2
+* logical addresses, so every 256-byte sector transfer translates V.LocalBuf
+* through the active FM-11 4 KiB MMR before programming the 20-bit DMA address.
+* The original PIO path remains available as an assembly-time fallback.
 *
 * Geometry:
 *   40 cylinders x 2 sides x 16 x 256-byte sectors
@@ -11,7 +12,7 @@
 ********************************************************************
 
                     nam       llfm11
-                    ttl       FM-11 Level 2 2D PIO floppy driver
+                    ttl       FM-11 Level 2 2D DMA floppy driver
 
                     ifp1
                     use       defsfile
@@ -22,6 +23,7 @@ D2SectorsPerSide    equ       16
 D2SectorsPerCyl     equ       32
 D2TotalSectors      equ       40*D2SectorsPerCyl
 PIOTimeout          equ       0
+FM11UseDMA0         equ       1
 
 rev                 set       $00
 edition             set       1
@@ -117,7 +119,7 @@ WaitDRQ             pshs      x
                     ldx       #PIOTimeout
 WaitDRQLoop         lda       >FM11_MFDC_STATUS
                     bita      #FM11_MFDC_ERRMASK
-                    bne       PIOReadError
+                    lbne      PIOReadError
                     bita      #FM11_MFDC_DRQ
                     bne       WaitDRQDone
                     leax      -1,x
@@ -133,13 +135,115 @@ WaitDRQDone         puls      x
                     rts
 
 ********************************************************************
-* ReadSector / WriteSector - 256-byte PIO transfers.
+* SetupDMA0Address
+*
+* Input: X = current CPU logical buffer address.
+*
+* DMA sees physical memory, not the Level 2 logical mapping.  Translate the
+* 16-bit CPU address through the currently active 4 KiB FM-11 MMR.
+*
+*   logical high byte = pppp oooo
+*     pppp = MMR slot (0..15)
+*     oooo = logical address bits 11..8
+*
+*   MMR[pppp] = physical 4 KiB page number
+*
+* DMA address:
+*   ADDR_H = physical page bits 7..4
+*   ADDR_M = physical page bits 3..0 : logical bits 11..8
+*   ADDR_L = logical bits 7..0
 ********************************************************************
-ReadSector          lda       #FM11_MFDC_READSEC
+SetupDMA0Address    pshs      d,x,y
+                    tfr       x,d
+                    stb       >FM11_DMA0_ADDR_L
+                    pshs      a
+                    lsra
+                    lsra
+                    lsra
+                    lsra
+                    ldy       #FM11_MMR_BASE
+                    lda       a,y
+                    tfr       a,b
+                    lsra
+                    lsra
+                    lsra
+                    lsra
+                    sta       >FM11_DMA0_ADDR_H
+                    andb      #$0F
+                    lslb
+                    lslb
+                    lslb
+                    lslb
+                    puls      a
+                    anda      #$0F
+                    pshs      b
+                    ora       ,s+
+                    sta       >FM11_DMA0_ADDR_M
+                    puls      d,x,y,pc
+
+********************************************************************
+* DMA0Wait - wait for DMA completion or error.
+********************************************************************
+DMA0Wait            pshs      x
+                    ldx       #PIOTimeout
+DMA0WaitLoop        lda       >FM11_DMA0_MODE
+                    bita      #FM11_DMA_ERROR
+                    bne       DMA0WaitError
+                    bita      #FM11_DMA_DONE
+                    bne       DMA0WaitDone
+                    leax      -1,x
+                    cmpx      #0
+                    bne       DMA0WaitLoop
+DMA0WaitError       puls      x
+                    orcc      #Carry
+                    rts
+DMA0WaitDone        puls      x
+                    andcc     #^Carry
+                    rts
+
+********************************************************************
+* ReadSector / WriteSector.
+*
+* DMA mode performs one 256-byte transfer per physical sector.  V.LocalBuf is
+* translated again after every Advance, so a 4 KiB boundary is safe even when
+* adjacent logical pages map to non-contiguous physical pages.
+********************************************************************
+ReadSector
+                  IFNE      FM11UseDMA0
+                    lbra      ReadSectorDMA
+                  ELSE
+                    lbra      ReadSectorPIO
+                  ENDC
+
+ReadSectorDMA       pshs      cc
+                    orcc      #IntMasks
+                    ldx       V.LocalBuf,u
+                    lbsr      SetupDMA0Address
+                    lda       #1
+                    sta       >FM11_DMA0_COUNT_H
+                    clr       >FM11_DMA0_COUNT_L
+                    lda       #FM11_DMA_ENABLE
+                    sta       >FM11_DMA0_MODE
+                    lda       #FM11_MFDC_READSEC
+                    sta       >FM11_MFDC_CMD
+                    puls      cc
+                    lbsr      DMA0Wait
+                    bcs       DMAReadError
+                    lda       >FM11_MFDC_STATUS
+                    bita      #FM11_MFDC_ERRMASK
+                    bne       DMAReadError
+                    clrb
+                    andcc     #^Carry
+                    rts
+DMAReadError        orcc      #Carry
+                    ldb       #E$Read
+                    rts
+
+ReadSectorPIO       lda       #FM11_MFDC_READSEC
                     sta       >FM11_MFDC_CMD
                     ldx       V.LocalBuf,u
                     ldy       #256
-ReadByte            bsr       WaitDRQ
+ReadByte            lbsr      WaitDRQ
                     bcs       ReadDone
                     lda       >FM11_MFDC_DATA
                     sta       ,x+
@@ -147,7 +251,7 @@ ReadByte            bsr       WaitDRQ
                     bne       ReadByte
                     lda       >FM11_MFDC_STATUS
                     bita      #FM11_MFDC_ERRMASK
-                    bne       PIOReadError
+                    lbne      PIOReadError
                     clrb
                     andcc     #^Carry
 ReadDone            rts
@@ -171,7 +275,38 @@ WaitWriteDone       puls      x
                     andcc     #^Carry
                     rts
 
-WriteSector         lda       #FM11_MFDC_WRITESEC
+WriteSector
+                  IFNE      FM11UseDMA0
+                    lbra      WriteSectorDMA
+                  ELSE
+                    lbra      WriteSectorPIO
+                  ENDC
+
+WriteSectorDMA      pshs      cc
+                    orcc      #IntMasks
+                    ldx       V.LocalBuf,u
+                    lbsr      SetupDMA0Address
+                    lda       #1
+                    sta       >FM11_DMA0_COUNT_H
+                    clr       >FM11_DMA0_COUNT_L
+                    lda       #FM11_DMA_ENABLE+FM11_DMA_DIR_WRITE
+                    sta       >FM11_DMA0_MODE
+                    lda       #FM11_MFDC_WRITESEC
+                    sta       >FM11_MFDC_CMD
+                    puls      cc
+                    lbsr      DMA0Wait
+                    bcs       DMAWriteError
+                    lda       >FM11_MFDC_STATUS
+                    bita      #FM11_MFDC_ERRMASK
+                    bne       DMAWriteError
+                    clrb
+                    andcc     #^Carry
+                    rts
+DMAWriteError       orcc      #Carry
+                    ldb       #E$Write
+                    rts
+
+WriteSectorPIO      lda       #FM11_MFDC_WRITESEC
                     sta       >FM11_MFDC_CMD
                     ldx       V.LocalBuf,u
                     ldy       #256
@@ -222,7 +357,7 @@ ll_write            lda       V.PhysSect,u
 
 WriteLoop           lbsr      SetupCHS
                     bcs       WriteExit
-                    bsr       WriteSector
+                    lbsr      WriteSector
                     bcs       WriteExit
                     lbsr      Advance
                     dec       V.LocalCnt,u
