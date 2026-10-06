@@ -82,6 +82,11 @@ build_one() {
     build "$ROOT/level2/cmds/procs.asm"          procs
     build "$ROOT/level1/cmds/date.asm"           date
 
+    # TMode is assembled from the common XMode/TMode source.
+    # It operates on an already-open SCF path (for example ".1") via
+    # I$GetStt/I$SetStt SS.Opt.
+    build "$ROOT/level1/cmds/xmode.asm"           tmode -DTMODE=1
+
     # Basic disk/file utilities.  These are kept out of OS9Boot and installed
     # only in /DD/CMDS so the boot module set remains small.
     build "$ROOT/level1/cmds/copy.asm"           copy
@@ -132,6 +137,9 @@ build_one() {
     os9 attr "$RBF,CMDS/Procs" -e -pe >/dev/null
     os9 copy -o=0 "$OUT/date" "$RBF,CMDS/Date"
     os9 attr "$RBF,CMDS/Date" -e -pe >/dev/null
+
+    os9 copy -o=0 "$OUT/tmode" "$RBF,CMDS/TMode"
+    os9 attr "$RBF,CMDS/TMode" -e -pe >/dev/null
 
     for cmd in copy dsave cmp makdir del attr list free; do
         case "$cmd" in
