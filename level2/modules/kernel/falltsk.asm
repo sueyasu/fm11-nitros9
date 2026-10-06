@@ -33,8 +33,23 @@ FAlltskReturn       rts                 ; return
 FDelTsk             ldx       R$X,u     ; load X from R$X,u
 FAlltskGrabTaskNum  ldb       P$Task,x  ; grab the current task number
                     beq       FAlltskErrors ; if system (or released), exit
+                  IFNE    fm11
+* FM-11: tear a task down as one interrupt-masked transaction.  Keep
+* P$Task valid until the cache tag, DAT-image pointer, and allocation map
+* have all been invalidated; this prevents observers from seeing a process
+* as task 0 while stale state for its old task number is still reachable.
+                    pshs      cc
+                    orcc      #IntMasks
+                    clr       <D.Task1N ; invalidate task-1 cache first
+                    ldx       <D.Tasks
+                    clr       b,x       ; make task number unavailable to old owner
+                    ldx       R$X,u     ; recover process descriptor pointer
+                    clr       P$Task,x  ; publish the released state last
+                    puls      cc,pc
+                  ELSE
                     clr       P$Task,x  ; force the task number to be zero
                     bra       FAlltskTarget3 ; do a F$RelTsk
+                  ENDC
 
 TstImg              equ       *         ; define assembler symbol TstImg
                   IFNE    H6309   ; begin conditional assembly for H6309
@@ -155,22 +170,19 @@ FAlltskTarget3      pshs      b,x       ; preserve it & X
                     tstb                ; check out B
                     beq       FAlltskReturn4 ; if system task, don't bother deleting the task
                   IFNE    fm11
-* FM-11 hardware task 1 caches the DAT image for the software task whose
-* task-table byte offset is recorded in D.Task1N.  A released software task
-* number can immediately be reused by another process with a different DAT
-* image.  Invalidate the cache when releasing the task currently represented
-* in hardware task 1, so KrnWeGngBack cannot mistake a reused task number for
-* an already-loaded DAT image.
-                    pshs      b         ; preserve raw software task number
-                    lslb                ; D.Task1N stores task # * 2
-                    cmpb      <D.Task1N ; is this the DAT cached in task 1?
-                    puls      b         ; restore raw software task number
-                    bne       FAlltskRelNoInv
-                    clr       <D.Task1N ; force next selection to reload task 1
-FAlltskRelNoInv     equ       *
-                  ENDC
+* FM-11: make the software-task teardown atomic with respect to IRQ/FIRQ.
+* Invalidate the task-1 cache before publishing the software task as free.
+                    pshs      cc
+                    orcc      #IntMasks
+                    clr       <D.Task1N ; never retain a cache hit across teardown
+                    ldx       <D.Tasks
+                    clr       b,x       ; publish task number as free
+                    puls      cc
+                    bra       FAlltskReturn4
+                  ELSE
                     ldx       <D.Tasks  ; get task table ptr
                     clr       b,x       ; clear out the task
+                  ENDC
 FAlltskReturn4      puls      b,x,pc    ; restore regs & return
 
 * Sleeping process update (Gets executed from clock)
