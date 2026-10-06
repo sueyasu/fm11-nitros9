@@ -92,6 +92,8 @@ build_one() {
     build "$ROOT/level1/cmds/copy.asm"           copy
     build "$ROOT/level1/cmds/dsave.asm"          dsave
     build "$ROOT/level1/cmds/cmp.asm"            cmp
+    build "$ROOT/level1/cmds/load.asm"           load
+    build "$ROOT/level1/cmds/unlink.asm"         unlink
     build "$ROOT/level1/cmds/makdir.asm"         makdir
     build "$ROOT/level1/cmds/del.asm"            del
     build "$ROOT/level1/cmds/attr.asm"           attr
@@ -141,11 +143,13 @@ build_one() {
     os9 copy -o=0 "$OUT/tmode" "$RBF,CMDS/TMode"
     os9 attr "$RBF,CMDS/TMode" -e -pe >/dev/null
 
-    for cmd in copy dsave cmp makdir del attr list free; do
+    for cmd in copy dsave cmp load unlink makdir del attr list free; do
         case "$cmd" in
             copy)   diskname=Copy ;;
             dsave)  diskname=DSave ;;
             cmp)    diskname=Cmp ;;
+            load)   diskname=Load ;;
+            unlink) diskname=Unlink ;;
             makdir) diskname=MakDir ;;
             del)    diskname=Del ;;
             attr)   diskname=Attr ;;
