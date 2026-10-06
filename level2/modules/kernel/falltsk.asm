@@ -154,6 +154,21 @@ FRelTsk             ldb       R$B,u     ; get task # to release
 FAlltskTarget3      pshs      b,x       ; preserve it & X
                     tstb                ; check out B
                     beq       FAlltskReturn4 ; if system task, don't bother deleting the task
+                  IFNE    fm11
+* FM-11 hardware task 1 caches the DAT image for the software task whose
+* task-table byte offset is recorded in D.Task1N.  A released software task
+* number can immediately be reused by another process with a different DAT
+* image.  Invalidate the cache when releasing the task currently represented
+* in hardware task 1, so KrnWeGngBack cannot mistake a reused task number for
+* an already-loaded DAT image.
+                    pshs      b         ; preserve raw software task number
+                    lslb                ; D.Task1N stores task # * 2
+                    cmpb      <D.Task1N ; is this the DAT cached in task 1?
+                    puls      b         ; restore raw software task number
+                    bne       FAlltskRelNoInv
+                    clr       <D.Task1N ; force next selection to reload task 1
+FAlltskRelNoInv     equ       *
+                  ENDC
                     ldx       <D.Tasks  ; get task table ptr
                     clr       b,x       ; clear out the task
 FAlltskReturn4      puls      b,x,pc    ; restore regs & return
