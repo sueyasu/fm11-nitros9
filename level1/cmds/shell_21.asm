@@ -86,7 +86,7 @@ temp rmb 1
 devnam rmb 72
 modbuf rmb 18
 shlbuf rmb 400
-stack rmb 256 
+stack rmb 256
 size equ .
 
 name equ *
@@ -108,11 +108,11 @@ lantbl fcb Prgrm+PCode
  fcb $00
  fcb $00
  fcb $00
- 
+
 Intro fcb C$LF
  fcc "Shell"
  fcb C$CR
- 
+
 DefPrmpt fcb C$LF
 OS9Prmpt fcc "OS9:"
 OS9PrmL equ *-OS9Prmpt
@@ -142,7 +142,7 @@ start leas -$05,s make room in case first char is "("
  bcs Exit2 ..error; return it
  tst <useful was anything useful done?
  bne shel90 ..yes; return (no error)
- 
+
 shel10 lds ,s++ recover parameter space
 L005E leax <Intro,pcr "OS9 Shell" BANNER
  tst <print prompting turned off?
@@ -167,13 +167,13 @@ shel35 tst <immort immortal shell?
  bne Exit2 ..yes; return error
 shel36 os9 F$PErr print error message
  bra shel20 ..repeat
- 
+
 shel40 cmpy #$0001 anything entered?
  bhi shel45 ..yes; try to do it
  leax >OS9Prmpt,pcr print new prompt
  ldy #OS9PrmL
  bra shel25 ..repeat
- 
+
 shel45 tst <INPTEE copy input to std error?
  beq shel50 ..no; continue
  bsr shout
@@ -255,7 +255,7 @@ ParamTable fdb Comment-*
  fdb clrrts-*
  fcs ";"
  fdb $0000
- 
+
 **********
 * TermTable
 *   Table of Shell Options
@@ -302,7 +302,7 @@ clrmem clr b,u
  decb
  bpl clrmem
  rts
- 
+
  ttl Line Processing routines
  pag
 **********
@@ -343,7 +343,7 @@ shli30 leay <prnlst,pcr get paren list
  lda #C$CR
  sta -$01,x blast end paren
  bra shli60 ..process parameters
- 
+
 shli50 bsr shopts save module, process pre-param opts
  bcs shli90 ..error; return it
 shli60 leay <trmlst,pcr List of param terminators
@@ -393,12 +393,12 @@ prsnam os9 F$PrsNam
 prsn10 leax ,y
 prsn15 clra
  rts
- 
+
 prsn20 comb
  leax -$01,x
  ldb #E$BPNam
  rts
- 
+
 **********
 * shfunc
 *   process a List of Shell Functions
@@ -418,11 +418,11 @@ shfunc bsr skpsep skip command separator
  puls y restore function tbl ptr
  bcc shfunc ..repeat if no error
  rts
- 
+
 shfu20 clra
  lda ,x
  puls pc,y return (done)
- 
+
 **********
 * scan
 *   Find Desired char in command line
@@ -448,7 +448,7 @@ L0233 lda ,x+
 L023B cmpa ,y+ found?
  bne scan20 ..no
  puls pc,y return
- 
+
 **********
 * skpsep
 *   Skip command line separator
@@ -466,7 +466,7 @@ skpsep pshs x
 skps10 cmpa ,x+ ..accepted terminator?
  bhi skps10 ..not this one
  puls pc,x ..return carry set if not
- 
+
 skps20 leas $02,s throw away saved command ptr
  lda #C$SPAC
 skps30 cmpa ,x+ skip spaces
@@ -474,7 +474,7 @@ skps30 cmpa ,x+ skip spaces
  leax -$01,x (note: comma returns space)
 clrrts andcc #^Carry return carry clear
  rts
- 
+
 **********
 * shsrch
 *   Search for Shell "Keyword"
@@ -504,7 +504,7 @@ shsr30 eora ,y+
  bcs shsr40 ..not; no match
 shsr35 clra CLEAR Carry
  puls pc,y,b,a return; found
- 
+
 shsr40 leay -$01,y
 shsr45 lda ,y+
  bpl shsr45 skip to end of tbl entry
@@ -570,7 +570,7 @@ shnp10 sta <print
 *
 Echo lda #$01 echo input lines
  bra shnt10
- 
+
 NoEcho clra don't echo input lines
 shnt10 sta <INPTEE
  rts
@@ -586,7 +586,7 @@ X lda #$01 exit if error
 NOX clra don't exit if error
 shxr10 sta <errxit
  rts
- 
+
 **********
 * Comment
 *   Skip Comment Line
@@ -618,7 +618,7 @@ rese20 bsr rstpth reset path
  bls rese20 ..no
  ror ,s+
  puls pc,b,a
- 
+
 **********
 * Rstpth
 *   Reset Redirected path
@@ -634,7 +634,8 @@ rstpth pshs a save path #
  tst a,u path redirected?
  beq rstp90 ..no; exit
  os9 I$Close close path
- lda a,u
+ ldb ,s
+ lda b,u
  os9 I$Dup restore path
 rstp10 ldb ,s
  lda b,u
@@ -666,7 +667,7 @@ shlimm inc <u0010
  lbsr L03DC
  clr <u0010
  lbra L005E
- 
+
  ttl Options
  pag
  **********
@@ -679,7 +680,7 @@ shlimm inc <u0010
 *
 InRedir ldd #READ. path zero, read
  bra shrdr
- 
+
 **********
 * Shrdou
 *   Redirect Std Output Or Error path
@@ -711,7 +712,7 @@ shrdr0 tst a,u path already redirected?
  tst <u0010
  bmi L0386
  bra shrdr1
- 
+
 shrdr tst a,u path already redirected?
  bne shlstx ..syntax error if so
  pshs b,a save regs
@@ -757,7 +758,7 @@ L03BC bsr L03AA
  ldd #$0180
  bra shrdr0
 
-* <>> 
+* <>>
 IERedir lda #C$CR
  sta -$03,x back up over <>>
  bsr L03AA
@@ -771,11 +772,11 @@ OERedir lda #C$CR
  lda #$01
  bsr L03AB
  bcs L03B7
- 
+
 L03DC ldd #$0281 stderr in A, ?? in B
  bra shrdr0
 
-* Handle /0 and /2 special names 
+* Handle /0 and /2 special names
 spcnam pshs x,b,a save regs
  ldd ,x++ get next two chars
  cmpd #'/*256+'0 /0?
@@ -898,7 +899,7 @@ setprm lda #Prgrm+Objct
  ldy <prmsiz
  ldu <prmptr
  rts
- 
+
 fork.b lda #EXEC. search for executable module
  os9 I$Open try to open file
  bcs shfork20 ..unable; look for procedure file
@@ -912,10 +913,10 @@ fork.b lda #EXEC. search for executable module
  lda M$Type,X get (A)=module type
  ldy M$Mem,X get (Y)=Static storage requirement
  bra shfork.c
- 
+
 shfk00 lda #C$CR
  sta -$01,x blast end of param token
- 
+
 shfork pshs u,y,x save caller's regs
  clra
  ldx <modnam
@@ -940,7 +941,7 @@ shfork pshs u,y,x save caller's regs
 shfork.c cmpa #Prgrm+Objct program module?
  beq shfork30 ..yes; FORK to it
  sty <modstk save module static storage
- 
+
 * Search subroutine library for class processor
  leax >lantbl,pcr
 shfork07 tst ,x end of table?
@@ -954,7 +955,7 @@ shfork07 tst ,x end of table?
 shfork08 tst ,x+ skip language name
  bpl shfork08
  bra shfork07
- 
+
 shfork10 ldd <prmptr
  subd <modnam
  addd <prmsiz
@@ -962,7 +963,7 @@ shfork10 ldd <prmptr
  ldd <modnam
  std <prmptr
  bra shfork25 fork to class processor
- 
+
 shfork20 ldx <prmsiz
  leax $05,x
  stx <prmsiz
@@ -979,7 +980,7 @@ shfork20 ldx <prmsiz
  stb ,-u default no prompts
  stu <prmptr
  leax >shlnam,pcr process "BATCH" FILE
- 
+
 shfork25 stx <modnam fork to language interpreter
 shfork30 ldx <modnam restore module name
  lda #Prgrm+Objct
@@ -1063,7 +1064,7 @@ shpipe10 clra
  os9 I$Dup dup std output path to input
  lda #$01
  lbra rstpth reset std output path
- 
+
 **********
  * shpnum
  *    Print decimal number, proceeded by (B)
@@ -1094,7 +1095,7 @@ shpn20 decb form tens digit
  puls pc,y,x,b,a
 
  pag
- 
+
 **********
 * Kill
 *   Kill a process
