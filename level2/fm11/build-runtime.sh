@@ -51,8 +51,21 @@ build_one() {
         $ASBASE --format=os9 --output="$OUT/$src" "$FM/modules/$src.asm"
     done
 
+    # Anonymous PipeMan used by the classic Shell pipeline operator (!).
+    # This source contains Level 2 conditional code and is the appropriate
+    # implementation for the /pipe device used by shell_21.asm.
+    # shellcheck disable=SC2086
+    $ASBASE --format=os9 --output="$OUT/pipeman" "$ROOT/level1/modules/pipeman.asm"
+
+    # Pipe device driver and /pipe device descriptor.
+    # These generic modules are shared with Level 1 and are required by PipeMan.
+    # shellcheck disable=SC2086
+    $ASBASE --format=os9 --output="$OUT/piper" "$ROOT/level1/modules/piper.asm"
+    # shellcheck disable=SC2086
+    $ASBASE --format=os9 --output="$OUT/pipe" "$ROOT/level1/modules/pipe.asm"
+
     echo "FM-11 Level 2 $CPU bring-up modules:"
-    for f in llfm11 d0_fm11 dd_fm11 fm11serial t1_fm11 init_fm11; do
+    for f in llfm11 d0_fm11 dd_fm11 fm11serial t1_fm11 init_fm11 pipeman piper pipe; do
         size=$(wc -c < "$OUT/$f" | tr -d ' ')
         printf '  %-12s %s bytes\n' "$f:" "$size"
     done
