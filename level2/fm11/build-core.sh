@@ -69,9 +69,7 @@ build_one() {
     # shellcheck disable=SC2086
     $ASBASE --format=os9 --output="$OUT/boot" "$FM/modules/boot_fdd.asm"
 
-    # For the first foundation commit the common Krn/KrnP2 bodies are still
-    # used.  FM-11 MMU access hooks are connected in the next integration
-    # commit; only the FM-11 placement hook is required here.
+    # Common Krn/KrnP2 include the FM-11 MMU primitive layer when fm11=1.
     # shellcheck disable=SC2086
     $ASBASE --format=os9 --output="$OUT/krn" \
         "$ROOT/level2/modules/kernel/krn.asm"
@@ -79,11 +77,6 @@ build_one() {
     # shellcheck disable=SC2086
     $ASBASE --format=os9 --output="$OUT/krnp2" \
         "$ROOT/level2/modules/kernel/krnp2.asm"
-
-    # Compile the backend itself as raw code to catch syntax/ABI mistakes.
-    # shellcheck disable=SC2086
-    $ASBASE --format=raw --output="$OUT/mmu-backend.bin" \
-        "$FM/kernel/mmu.asm"
 
     # shellcheck disable=SC2086
     $ASBASE --format=raw --output="$OUT/fm11tramp.bin" \
@@ -98,7 +91,6 @@ build_one() {
     BOOTSIZE=$(wc -c < "$OUT/boot" | tr -d ' ')
     KRNSIZE=$(wc -c < "$OUT/krn" | tr -d ' ')
     KRNP2SIZE=$(wc -c < "$OUT/krnp2" | tr -d ' ')
-    MMUSIZE=$(wc -c < "$OUT/mmu-backend.bin" | tr -d ' ')
     TRAMPSIZE=$(wc -c < "$OUT/fm11tramp.bin" | tr -d ' ')
 
     REL_SLOT=$((0x130))
@@ -136,7 +128,6 @@ build_one() {
     echo "  Boot:         $BOOTSIZE bytes (slot $BOOT_SLOT)"
     echo "  Krn:          $KRNSIZE bytes (slot $KRN_SLOT)"
     echo "  KrnP2:        $KRNP2SIZE bytes"
-    echo "  MMU backend:  $MMUSIZE bytes"
     echo "  trampoline:   $TRAMPSIZE bytes"
     echo "  kernel track: $TRACKSIZE bytes"
 }

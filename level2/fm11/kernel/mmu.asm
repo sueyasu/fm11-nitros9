@@ -1,27 +1,74 @@
 ********************************************************************
 * mmu.asm - FM-11 Level 2 MMR primitives
 *
-* This file collects the primitive FM-11 MMR operations that already exist
-* in the current runtime paths.  It is intentionally not wired into Krn yet.
+* Central FM-11 MMR primitive layer used by the Level 2 runtime.
 *
 * NitrOS-9 keeps the normal Level 2 8 KiB DAT abstraction.  One logical
 * block P is expanded to the two FM-11 4 KiB hardware pages 2P and 2P+1.
 *
-* IMPORTANT:
-*   - These routines mirror current runtime behaviour; they do not change
-*     mapping policy.
-*   - Interrupt masking remains the caller's responsibility, as it is in the
-*     current fld/fldabx/fmove/krn code.
-*   - F$Move has a no-stack interval while logical blocks 5/6 are remapped.
-*     Do not replace that inline sequence with BSR/LBSR calls until that
-*     constraint is handled explicitly.
+* Interrupt masking remains the caller's responsibility.
+*
+* F$Move cannot call a mapping subroutine after replacing logical blocks 5/6:
+* its stack can itself live in one of those windows.  The no-stack mappings
+* are therefore macros defined here and expanded inline by F$Move.  Other
+* kernel users call the small routines below.
 ********************************************************************
 
-                    IFP1
-                    use       defsfile
-                    ENDC
+                    ifndef    FM11_MMU_ROUTINES
+FM11_MMU_ROUTINES   set       0
+                    endc
 
-                    org       0
+********************************************************************
+* Inline primitives.  These emit no stack accesses.
+********************************************************************
+
+FM11_MAP5_A         macro     noexpand
+                    lsla
+                    sta       >DAT.Regs+$0A
+                    inca
+                    sta       >DAT.Regs+$0B
+                    endm
+
+FM11_MAP6_A         macro     noexpand
+                    lsla
+                    sta       >DAT.Regs+$0C
+                    inca
+                    sta       >DAT.Regs+$0D
+                    endm
+
+FM11_MAP56_AB       macro     noexpand
+                    FM11_MAP5_A
+                    tfr       b,a
+                    FM11_MAP6_A
+                    endm
+
+* Restore logical blocks 5/6 from the system DAT image using Y as scratch.
+* This is the form used by F$Move, where X/U are the live source/destination
+* pointers throughout the no-stack interval.
+FM11_RESTORE56_Y    macro     noexpand
+                    ldy       <D.SysDAT
+                    lda       $0B,y
+                    FM11_MAP5_A
+                    lda       $0D,y
+                    FM11_MAP6_A
+                    endm
+
+* Same restore operation for code paths where X is already scratch.
+FM11_RESTORE56_X    macro     noexpand
+                    ldx       <D.SysDAT
+                    lda       $0B,x
+                    FM11_MAP5_A
+                    lda       $0D,x
+                    FM11_MAP6_A
+                    endm
+
+* Fixed-RAM task loader.  Kept as a macro so the runtime has one canonical
+* spelling without adding an otherwise unnecessary trampoline wrapper.
+FM11_LOAD_TASK      macro     noexpand
+                    jsr       >FM11_L2_SETTASK
+                    endm
+
+                  IFNE      FM11_MMU_ROUTINES
 
 ********************************************************************
 * Map one 8 KiB OS physical block into logical block 5 ($A000-$BFFF).
@@ -32,10 +79,7 @@
 * Exit : A = second FM-11 4 KiB page number (2*block+1)
 *        all other registers preserved
 ********************************************************************
-FM11Map5            lsla
-                    sta       >DAT.Regs+$0A
-                    inca
-                    sta       >DAT.Regs+$0B
+FM11Map5            FM11_MAP5_A
                     rts
 
 ********************************************************************
@@ -45,37 +89,7 @@ FM11Map5            lsla
 * Exit : A = second FM-11 4 KiB page number (2*block+1)
 *        all other registers preserved
 ********************************************************************
-FM11Map6            lsla
-                    sta       >DAT.Regs+$0C
-                    inca
-                    sta       >DAT.Regs+$0D
-                    rts
-
-********************************************************************
-* Map two 8 KiB blocks into logical blocks 5 and 6.
-*
-* This is the primitive operation performed inline by F$Move and by the
-* register-stack copy paths in krn.asm.
-*
-* Entry: A = block for logical block 5 ($A000-$BFFF)
-*        B = block for logical block 6 ($C000-$DFFF)
-* Exit : A = second 4 KiB page of the block supplied in B
-*        B preserved
-*
-* NOTE: The routine itself ends in RTS and therefore uses S.  Current F$Move
-* deliberately performs this mapping inline because its stack may lie in a
-* window being replaced.  This routine is for callers whose stack is known
-* to remain accessible; F$Move must not call it as-is.
-********************************************************************
-FM11Map56           lsla
-                    sta       >DAT.Regs+$0A
-                    inca
-                    sta       >DAT.Regs+$0B
-                    tfr       b,a
-                    lsla
-                    sta       >DAT.Regs+$0C
-                    inca
-                    sta       >DAT.Regs+$0D
+FM11Map6            FM11_MAP6_A
                     rts
 
 ********************************************************************
@@ -119,7 +133,7 @@ FM11Restore56       ldu       <D.SysDAT
 *
 * DAT image entries are two bytes; the physical block number is byte +1.
 ********************************************************************
-FM11MapDAT          leau      1,u
+FM11MapDAT
                     ldb       #DAT.BlCt
 FM11MapDATLoop      lda       ,u
                     lsla
@@ -131,17 +145,4 @@ FM11MapDATLoop      lda       ,u
                     bne       FM11MapDATLoop
                     rts
 
-********************************************************************
-* Load a software DAT image into an FM-11 hardware task bank.
-*
-* Runtime implementation remains in fixed CPU-card SRAM because programming
-* an inactive task safely requires staging the DAT image and temporarily
-* disabling translation.  This entry simply exposes that existing primitive.
-*
-* Entry: B = destination hardware task number
-*        U = eight-entry NitrOS-9 DAT image
-* Exit : caller-visible CC,D,X,Y,U preserved by the trampoline loader
-********************************************************************
-FM11LoadTask        jmp       >FM11_L2_SETTASK
-
-                    end
+                  ENDC

@@ -105,32 +105,16 @@ FMoveCount          stw       12,s      ; save count
                   IFNE    fm11
                     ldy       10,s      ; source DAT entry pointer
                     lda       1,y
-                    lsla
-                    sta       >DAT.Regs+$0A
-                    inca
-                    sta       >DAT.Regs+$0B
+                    FM11_MAP5_A
                     ldy       6,s       ; destination DAT entry pointer
                     lda       1,y
-                    lsla
-                    sta       >DAT.Regs+$0C
-                    inca
-                    sta       >DAT.Regs+$0D
+                    FM11_MAP6_A
                   ELSE
                     std       >DAT.Regs+5 ; map in the blocks
                   ENDC
                     tfm       x+,u+     ; copy up to 256 bytes (max 774 cycles)
                   IFNE    fm11
-                    ldy       <D.SysDAT
-                    lda       $0B,y
-                    lsla
-                    sta       >DAT.Regs+$0A
-                    inca
-                    sta       >DAT.Regs+$0B
-                    lda       $0D,y
-                    lsla
-                    sta       >DAT.Regs+$0C
-                    inca
-                    sta       >DAT.Regs+$0D
+                    FM11_RESTORE56_Y
                   ELSE
                     sty       >DAT.Regs+5 ; restore system blocks 5&6 to normal
                   ENDC
@@ -216,15 +200,7 @@ ndst@               puls      y         ; reload the (possibly adjusted) pages
                     stb       <D.IRQTmp+1 ; save copy of current copy block size
                   IFNE    fm11
                     tfr       y,d       ; A=source 8K block, B=destination 8K block
-                    lsla
-                    sta       >DAT.Regs+$0A
-                    inca
-                    sta       >DAT.Regs+$0B
-                    tfr       b,a
-                    lsla
-                    sta       >DAT.Regs+$0C
-                    inca
-                    sta       >DAT.Regs+$0D
+                    FM11_MAP56_AB
                     ldb       <D.IRQTmp+1
                   ELSE
                     sty       >DAT.Regs+5 ; swap in source/dest MMU blocks into $A000-$DFFF
@@ -255,16 +231,7 @@ FMoveCyclsPerByts   pulu      y,d       ; 9 55 cycles per 8 bytes copied
                     exg       x,u       ; 8 Swap updated source/dest ptrs
 FMoveSystemDAT      ldy       <D.SysDAT ; 6 Get system DAT pointer
                   IFNE    fm11
-                    lda       $0B,y
-                    lsla
-                    sta       >DAT.Regs+$0A
-                    inca
-                    sta       >DAT.Regs+$0B
-                    lda       $0D,y
-                    lsla
-                    sta       >DAT.Regs+$0C
-                    inca
-                    sta       >DAT.Regs+$0D
+                    FM11_RESTORE56_Y
                   ELSE
                     lda       $0B,y     ; 5 Get original MMU blocks
                     ldb       $0D,y     ; 5

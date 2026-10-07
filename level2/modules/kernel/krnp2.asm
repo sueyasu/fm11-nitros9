@@ -82,6 +82,10 @@ Network             equ       0         ; set to 1 to enable network I/O ptrs
                     use       cocovtio.d ; include source file cocovtio.d
                   ENDC
 
+                  IFNE    fm11
+                    use       mmu.asm
+                  ENDC
+
 TC9                 set       false     ; "true" use TC-9 6309 trap vector
 Edition             equ       20        ; define assembler symbol Edition
 Revision            equ       0         ; define assembler symbol Revision
@@ -160,15 +164,9 @@ done                puls      b         ; restore task #
                     orcc      #IntMasks ; shut IRQ's down
                   IFNE    fm11
                     lda       1,u
-                    lsla
-                    sta       >DAT.Regs+$0A
-                    inca
-                    sta       >DAT.Regs+$0B
+                    FM11_MAP5_A
                     lda       3,u
-                    lsla
-                    sta       >DAT.Regs+$0C
-                    inca
-                    sta       >DAT.Regs+$0D
+                    FM11_MAP6_A
                   ELSE
                     lda       1,u       ; get 1st block
                     ldb       3,u       ; get a second in case of overlap
@@ -186,16 +184,7 @@ Uday                lda       ,x+       ; load A from ,x+
                   ENDC
                     ldx       <D.SysDAT ; get the system DAT image pointer
                   IFNE    fm11
-                    lda       $0B,x
-                    lsla
-                    sta       >DAT.Regs+$0A
-                    inca
-                    sta       >DAT.Regs+$0B
-                    lda       $0D,x
-                    lsla
-                    sta       >DAT.Regs+$0C
-                    inca
-                    sta       >DAT.Regs+$0D
+                    FM11_RESTORE56_X
                   ELSE
                     lda       $0B,x     ; get the original blocks
                     ldb       $0D,x     ; load B from $0D,x

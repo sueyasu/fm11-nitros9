@@ -695,10 +695,7 @@ l@                  sta       b,x       ; store the flag in the appropriate offs
 * $00/$01 and therefore aliases block 0; smaller memories ghost earlier.
                     ldb       #$08
 FM11KrnBlock        tfr       b,a
-                    lsla
-                    sta       >DAT.Regs+$0A
-                    inca
-                    sta       >DAT.Regs+$0B
+                    lbsr      FM11Map5
                     lda       #$01
                     sta       >-$6000,x
                     cmpa      ,x
@@ -741,8 +738,8 @@ KrnBlock            aslb                ; B <= 1 (hi bit goes into carry, 0 goes
                   IFNE    fm11
 * Restore task-0 logical block 5 to its early identity mapping.
                     pshs      d
-                    ldd       #$0A0B
-                    std       >DAT.Regs+$0A
+                    lda       #5
+                    lbsr      FM11Map5
                     puls      d
                   ELSE
                   IFNE    picothing ; begin conditional assembly for picothing
@@ -1099,15 +1096,9 @@ KrnBlockNumberWhere leau      a,u       ; point to the block number where stack 
                   IFNE    fm11
 * Logical 8 KiB windows 5 and 6 expand to MMR pairs A/B and C/D.
                     lda       1,u
-                    lsla
-                    sta       >DAT.Regs+$0A
-                    inca
-                    sta       >DAT.Regs+$0B
+                    lbsr      FM11Map5
                     lda       3,u
-                    lsla
-                    sta       >DAT.Regs+$0C
-                    inca
-                    sta       >DAT.Regs+$0D
+                    lbsr      FM11Map6
                   ELSE
                     lda       1,u       ; get the first block
                     ldb       3,u       ; get a second just in case of overlap
@@ -1125,16 +1116,7 @@ l@                  ldu       ,x++      ; get the source bytes
                   ENDC
                     ldx       <D.SysDAT ; get the system DAT pointer
                   IFNE    fm11
-                    lda       $0B,x
-                    lsla
-                    sta       >DAT.Regs+$0A
-                    inca
-                    sta       >DAT.Regs+$0B
-                    lda       $0D,x
-                    lsla
-                    sta       >DAT.Regs+$0C
-                    inca
-                    sta       >DAT.Regs+$0D
+                    lbsr      FM11Restore56
                   ELSE
                     lda       $0B,x     ; get the first block we took out
                     ldb       $0D,x     ; and the second
@@ -1223,6 +1205,11 @@ GetSvcVector
                     use       ffreehb.asm ; include source file ffreehb.asm
 
                     use       fdatlog.asm ; include source file fdatlog.asm
+
+                  IFNE    fm11
+FM11_MMU_ROUTINES   set       1
+                    use       mmu.asm
+                  ENDC
 
                     use       fld.asm   ; include source file fld.asm
 
@@ -1476,7 +1463,7 @@ KrnWeGngBack        equ       *
                     ldu       <D.TskIPt
                     ldu       b,u
                     ldb       #1
-                    jsr       >FM11_L2_SETTASK
+                    FM11_LOAD_TASK
                     lda       #1
                     sta       <D.TINIT
                     rts
@@ -1516,16 +1503,7 @@ KrnWeGngBack        equ       *
 * U = address of DAT image to update into MMU
 KrnActualMMUBlock   leau      1,u       ; point to the actual MMU block
                   IFNE    fm11
-* Expand each normal 8 KiB DAT entry into two consecutive 4 KiB MMR pages.
-                    ldb       #DAT.BlCt
-FM11KrnMapDAT       lda       ,u
-                    lsla
-                    sta       ,x+
-                    inca
-                    sta       ,x+
-                    leau      2,u
-                    decb
-                    bne       FM11KrnMapDAT
+                    lbsr      FM11MapDAT
                     rts
                   ELSE
                   IFNE    picothing ; begin conditional assembly for picothing

@@ -131,30 +131,3 @@ smap@               equ       *         ; remap path for an ordinary block
                   ENDC
                     endif
 sdone@              puls      cc,d,x,u,pc ; restore cc,d,x,u,pc from the stack
-
-                  IFNE    fm11
-* Shared FM-11 temporary-window helpers used by fld.asm/fldabx.asm.
-* A contains a standard NitrOS-9 8 KiB physical block number.
-FM11Map5            lsla
-                    sta       >DAT.Regs+$0A
-                    inca
-                    sta       >DAT.Regs+$0B
-                    rts
-
-FM11Map6            lsla
-                    sta       >DAT.Regs+$0C
-                    inca
-                    sta       >DAT.Regs+$0D
-                    rts
-
-* U is scratch in these restore helpers.
-FM11Restore5        ldu       <D.SysDAT
-                    lda       $0B,u
-                    bra       FM11Map5
-
-FM11Restore56       ldu       <D.SysDAT
-                    lda       $0B,u
-                    bsr       FM11Map5
-                    lda       $0D,u
-                    bra       FM11Map6
-                  ENDC
