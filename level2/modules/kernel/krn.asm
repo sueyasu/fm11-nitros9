@@ -1499,10 +1499,12 @@ KrnWeGngBack        equ       *
                   ENDC
 * COME HERE FROM FALLTSK
 * Update 8 MMU mappings.
-* X = address of 1st DAT MMU register to update
 * U = address of DAT image to update into MMU
+* X = address of 1st DAT MMU register to update (non-FM11)
+*     FM-11 always updates the live task-0 MMR bank.
 KrnActualMMUBlock   leau      1,u       ; point to the actual MMU block
                   IFNE    fm11
+                    ldx       #DAT.Regs
                     lbsr      FM11MapDAT
                     rts
                   ELSE

@@ -96,7 +96,6 @@ FAlltskJoin         equ       *         ; define assembler symbol FAlltskJoin
 * so update it immediately.
                     tstb
                     bne       FAlltskTarget
-                    ldx       #DAT.Regs
                     lbsr      KrnActualMMUBlock
                     bra       FAlltskTarget
                   ELSE
