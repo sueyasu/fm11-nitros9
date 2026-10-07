@@ -105,10 +105,13 @@ FM11_L2_JMPUSR       EQU       $FF20
 FM11_L2_RTIUSR       EQU       $FF2C
 FM11_L2_RTIMASK      EQU       $FF34
 FM11_L2_DATBUF       EQU       $FF44
-* $FF54-$FF5B is fixed SRAM outside the MMR map.  Temporary mapping
+* $FF54-$FF5D is fixed SRAM outside the MMR map.  Temporary mapping
 * helpers save the actual hardware MMR contents here before remapping.
 FM11_L2_MAPSAVE01    EQU       $FF54
 FM11_L2_MAPSAVE56    EQU       $FF58
+* F$Move cannot use the process stack while MMR10-MMR13 are replaced.
+* Preserve the input D register here while taking a no-stack MMR snapshot.
+FM11_L2_MAPTMP       EQU       $FF5C
 FM11_L2_SETTASK      EQU       $FF60
 FM11_L2_FLIP0        EQU       $FFA0
 FM11_L2_TRAMP_END    EQU       $FFF0
