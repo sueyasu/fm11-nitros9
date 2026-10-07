@@ -105,6 +105,10 @@ FM11_L2_JMPUSR       EQU       $FF20
 FM11_L2_RTIUSR       EQU       $FF2C
 FM11_L2_RTIMASK      EQU       $FF34
 FM11_L2_DATBUF       EQU       $FF44
+* $FF54-$FF5B is fixed SRAM outside the MMR map.  Temporary mapping
+* helpers save the actual hardware MMR contents here before remapping.
+FM11_L2_MAPSAVE01    EQU       $FF54
+FM11_L2_MAPSAVE56    EQU       $FF58
 FM11_L2_SETTASK      EQU       $FF60
 FM11_L2_FLIP0        EQU       $FFA0
 FM11_L2_TRAMP_END    EQU       $FFF0
