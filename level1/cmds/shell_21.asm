@@ -634,8 +634,7 @@ rstpth pshs a save path #
  tst a,u path redirected?
  beq rstp90 ..no; exit
  os9 I$Close close path
- ldb ,s
- lda b,u
+ lda a,u
  os9 I$Dup restore path
 rstp10 ldb ,s
  lda b,u
