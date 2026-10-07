@@ -63,7 +63,7 @@ build_one() {
 
     # Common sources that already support both OS levels.
     build "$ROOT/level1/modules/ioman.asm"       ioman
-    build "$ROOT/level1/modules/rbsuper.asm"     rbsuper -Dwildbits=1 -DDrvCount=1
+    build "$ROOT/level1/modules/rbsuper.asm"     rbsuper -Dwildbits=1 -DDrvCount=4
     build "$ROOT/level1/modules/scf.asm"         scf
     build "$ROOT/level2/modules/clock.asm"         clock
     build "$ROOT/level1/modules/clock2_soft.asm" clock2_soft

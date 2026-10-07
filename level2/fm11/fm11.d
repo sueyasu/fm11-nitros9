@@ -158,12 +158,40 @@ FM11_MFDC_WRITESEC  EQU       $A0
 FM11_MFDC_RESTORE   EQU       $00
 FM11_MFDC_WRITETRK  EQU       $F0
 
+********************************************************************
+* 2HD standard FDC and DMA channel 1
+********************************************************************
+
+FM11_FDC_CMD        EQU       $FD30
+FM11_FDC_STATUS     EQU       $FD30
+FM11_FDC_TRACK      EQU       $FD31
+FM11_FDC_SECTOR     EQU       $FD32
+FM11_FDC_DATA       EQU       $FD33
+FM11_FDC_SIDE       EQU       $FD34
+FM11_FDC_DRIVE      EQU       $FD35
+FM11_FDC_AUX        EQU       $FD36
+FM11_FDC_IRQSTAT    EQU       $FD37
+FM11_FDC_DRQ        EQU       $02
+FM11_FDC_ERRMASK    EQU       $90
+FM11_FDC_READSEC    EQU       $80
+FM11_FDC_WRITESEC   EQU       $A0
+FM11_FDC_RESTORE    EQU       $00
+FM11_FDC_WRITETRK   EQU       $F0
+
 FM11_DMA0_ADDR_H    EQU       $FD94
 FM11_DMA0_ADDR_M    EQU       $FD40
 FM11_DMA0_ADDR_L    EQU       $FD41
 FM11_DMA0_COUNT_H   EQU       $FD42
 FM11_DMA0_COUNT_L   EQU       $FD43
 FM11_DMA0_MODE      EQU       $FD50
+
+FM11_DMA1_ADDR_H    EQU       $FD95
+FM11_DMA1_ADDR_M    EQU       $FD44
+FM11_DMA1_ADDR_L    EQU       $FD45
+FM11_DMA1_COUNT_H   EQU       $FD46
+FM11_DMA1_COUNT_L   EQU       $FD47
+FM11_DMA1_MODE      EQU       $FD51
+
 FM11_DMA_DIR_WRITE  EQU       $01
 FM11_DMA_ENABLE     EQU       $04
 FM11_DMA_ERROR      EQU       $40
