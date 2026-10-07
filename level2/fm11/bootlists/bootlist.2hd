@@ -1,0 +1,24 @@
+# FM-11 NitrOS-9 Level 2 initial 2HD bootfile
+krnp2
+fm11trampmod
+ioman
+init_fm11
+rbf
+rbsuper
+llfm11
+dd_2hd_fm11
+d0_2hd_fm11
+md0_fm11
+md1_fm11
+nd0_fm11
+nd1_fm11
+scf
+fm11serial
+t1_fm11
+clock
+clock2_soft
+sysgo
+pipeman
+piper
+pipe
+shell

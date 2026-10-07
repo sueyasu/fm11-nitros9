@@ -67,7 +67,13 @@ build_one() {
     $ASBASE --format=raw --output="$OUT/ipl-2d.bin" "$FM/ipl/ipl_fdd.asm"
 
     # shellcheck disable=SC2086
+    $ASBASE --format=raw --output="$OUT/ipl-2hd.bin" "$FM/ipl/ipl_fdd_2hd.asm"
+
+    # shellcheck disable=SC2086
     $ASBASE --format=os9 --output="$OUT/boot" "$FM/modules/boot_fdd.asm"
+
+    # shellcheck disable=SC2086
+    $ASBASE --format=os9 --output="$OUT/boot-2hd" "$FM/modules/boot_fdd_2hd.asm"
 
     # Common Krn/KrnP2 include the FM-11 MMU primitive layer when fm11=1.
     # shellcheck disable=SC2086
@@ -88,7 +94,9 @@ build_one() {
 
     RELSIZE=$(wc -c < "$OUT/rel" | tr -d ' ')
     IPLSIZE=$(wc -c < "$OUT/ipl-2d.bin" | tr -d ' ')
+    IPL2HDSIZE=$(wc -c < "$OUT/ipl-2hd.bin" | tr -d ' ')
     BOOTSIZE=$(wc -c < "$OUT/boot" | tr -d ' ')
+    BOOT2HDSIZE=$(wc -c < "$OUT/boot-2hd" | tr -d ' ')
     KRNSIZE=$(wc -c < "$OUT/krn" | tr -d ' ')
     KRNP2SIZE=$(wc -c < "$OUT/krnp2" | tr -d ' ')
     TRAMPSIZE=$(wc -c < "$OUT/fm11tramp.bin" | tr -d ' ')
@@ -104,6 +112,10 @@ build_one() {
         echo "IPL too large: $IPLSIZE bytes" >&2
         exit 1
     fi
+    if [ "$IPL2HDSIZE" -gt 512 ]; then
+        echo "2HD IPL too large: $IPL2HDSIZE bytes" >&2
+        exit 1
+    fi
     if [ "$RELSIZE" -ne "$REL_SLOT" ]; then
         echo "REL size error: $RELSIZE (expected $REL_SLOT)" >&2
         exit 1
@@ -114,9 +126,11 @@ build_one() {
     fi
 
     pad_file "$OUT/boot" "$OUT/boot.slot" "$BOOT_SLOT"
+    pad_file "$OUT/boot-2hd" "$OUT/boot-2hd.slot" "$BOOT_SLOT"
     pad_file "$OUT/krn" "$OUT/krn.slot" "$KRN_SLOT"
 
     cat "$OUT/rel" "$OUT/boot.slot" "$OUT/krn.slot" > "$OUT/kerneltrack-2d"
+    cat "$OUT/rel" "$OUT/boot-2hd.slot" "$OUT/krn.slot" > "$OUT/kerneltrack-2hd"
     PAYLOADSIZE=$(wc -c < "$OUT/kerneltrack-2d" | tr -d ' ')
     if [ "$PAYLOADSIZE" -ne "$TRACK_PAYLOAD" ]; then
         echo "kernel payload size error: $PAYLOADSIZE (expected $TRACK_PAYLOAD)" >&2
@@ -128,15 +142,24 @@ build_one() {
         echo "kernel track size error: $TRACKSIZE (expected $TRACK_SIZE)" >&2
         exit 1
     fi
+    truncate -s "$TRACK_SIZE" "$OUT/kerneltrack-2hd"
+    TRACK2HDSIZE=$(wc -c < "$OUT/kerneltrack-2hd" | tr -d ' ')
+    if [ "$TRACK2HDSIZE" -ne "$TRACK_SIZE" ]; then
+        echo "2HD kernel track size error: $TRACK2HDSIZE (expected $TRACK_SIZE)" >&2
+        exit 1
+    fi
 
     echo "FM-11 Level 2 $CPU 8K-pair core:"
-    echo "  IPL:          $IPLSIZE bytes"
+    echo "  IPL 2D:       $IPLSIZE bytes"
+    echo "  IPL 2HD:      $IPL2HDSIZE bytes"
     echo "  REL:          $RELSIZE bytes"
-    echo "  Boot:         $BOOTSIZE bytes (slot $BOOT_SLOT)"
+    echo "  Boot 2D:      $BOOTSIZE bytes (slot $BOOT_SLOT)"
+    echo "  Boot 2HD:     $BOOT2HDSIZE bytes (slot $BOOT_SLOT)"
     echo "  Krn:          $KRNSIZE bytes (slot $KRN_SLOT)"
     echo "  KrnP2:        $KRNP2SIZE bytes"
     echo "  trampoline:   $TRAMPSIZE bytes"
-    echo "  kernel track: $TRACKSIZE bytes"
+    echo "  kernel 2D:    $TRACKSIZE bytes"
+    echo "  kernel 2HD:   $TRACK2HDSIZE bytes"
 }
 
 case "${1:-}" in
