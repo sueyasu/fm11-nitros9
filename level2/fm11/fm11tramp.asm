@@ -52,7 +52,8 @@ FM11TrSWICommon
                     sta       >FM11_L2_STATE+1
                     ldb       [R$PC,s]
                     stb       >FM11_L2_STATE+2
-                    lda       >FM11_L2_STATE
+* $FD90 is readable; use the hardware selector as the current-task truth.
+                    lda       >DAT.Task
                     beq       FM11TrSystemSWI
 
                     sts       >FM11_L2_USERS
@@ -79,10 +80,9 @@ FM11TrSystemSWI
 
 FM11TrTrapCommon
                     sta       >FM11_L2_STATE+1
-                    lda       >FM11_L2_STATE
                     clra
                     sta       >FM11_L2_STATE+3
-                    lda       >FM11_L2_STATE
+                    lda       >DAT.Task
                     beq       FM11TrSelectSystem
 
 * A user interrupt frame becomes inaccessible after selecting task 0.
@@ -102,14 +102,16 @@ FM11TrTrapCopy      lda       ,u+
                     lds       #FM11_L2_SWISTACK
 
 FM11TrSelectSystem
+* Read the task number from hardware before selecting task 0.  $FD90 is the
+* authoritative current-task state; FM11_L2_STATE is no longer mirrored.
+                    ldb       >DAT.Task
                     clra
                     sta       >DAT.Task
                     tfr       a,dp
-                    lda       >FM11_L2_STATE
-                    beq       FM11TrKeepTaskShadow
-                    sta       <D.TINIT
-FM11TrKeepTaskShadow
-                    clr       >FM11_L2_STATE
+                    tstb
+                    beq       FM11TrKeepTask
+                    stb       <D.TINIT
+FM11TrKeepTask
                     clra
                     ldb       >FM11_L2_STATE+1
                     tfr       d,x
@@ -131,7 +133,6 @@ FM11TrSWIStack      fill      $00,R$Size
 
                     fill      $00,(FM11_L2_RETUSR-FM11_L2_TRAMP)-(*-FM11TrImageStart)
 FM11TrReturnUser
-                    sta       >FM11_L2_STATE
                     sta       >DAT.Task
                     leas      ,y
                     tstb
@@ -147,19 +148,16 @@ FM11TrReturnRTI     rti
                     fill      $00,(FM11_L2_JMPUSR-FM11_L2_TRAMP)-(*-FM11TrImageStart)
 FM11TrJumpUser
                     lds       >FM11_L2_USERS
-                    stb       >FM11_L2_STATE
                     stb       >DAT.Task
                     jmp       ,u
 
                     fill      $00,(FM11_L2_RTIUSR-FM11_L2_TRAMP)-(*-FM11TrImageStart)
 FM11TrRTIUser
-                    sta       >FM11_L2_STATE
                     sta       >DAT.Task
                     rti
 
                     fill      $00,(FM11_L2_RTIMASK-FM11_L2_TRAMP)-(*-FM11TrImageStart)
 FM11TrRTIMasked
-                    sta       >FM11_L2_STATE
                     sta       >DAT.Task
                     lda       ,s
                     ora       #IntMasks
@@ -182,7 +180,7 @@ FM11TrSetTask
 * scratch while task 1 is being programmed, but its callers retain them.
                     pshs      cc,d,x,y,u
                     orcc      #IntMasks
-                    stb       >FM11_L2_STATE+4
+                    tfr       d,y
 
 * Stage eight OS blocks as sixteen hardware pages before changing tasks.
                     ldx       #FM11_L2_DATBUF
@@ -196,18 +194,37 @@ FM11TrStageDAT      lda       1,u
                     decb
                     bne       FM11TrStageDAT
 
-                    lda       >FM11_L2_STATE+4
-                    sta       >DAT.Task
-                    ldx       #FM11_MMR_BASE
-                    ldy       #FM11_L2_DATBUF
+* Program the destination bank while translation is disabled.  $FD90 is
+* still usable as the MMR-bank selector with the MMU off, so the CPU never
+* executes through the target bank while its sixteen registers are only
+* partially updated.
+*
+* Y preserves the entry D value while the DAT image is expanded.  Recover
+* destination task B from Y here, then use FM11_L2_STATE+4 only for the exact
+* pre-call MMR control value.  This keeps the fixed entry layout unchanged
+* and fits in the existing $FF60-$FF9F SetTask slot.
+                    tfr       y,d
+                    ldx       #FM11_MMR_TASK
+                    lda       3,x
+                    sta       >FM11_L2_STATE+4
+                    anda      #$7F
+                    sta       3,x
+                    stb       ,x
+
+* $FD80 is exactly sixteen bytes below $FD90.  After sixteen post-increment
+* stores X again points at $FD90, which makes the restore sequence compact.
+                    leax      -16,x
+                    ldu       #FM11_L2_DATBUF
                     ldb       #FM11_MMR_PAGES
-FM11TrWriteDAT      lda       ,y+
+FM11TrWriteDAT      lda       ,u+
                     sta       ,x+
                     decb
                     bne       FM11TrWriteDAT
 
                     clra
-                    sta       >DAT.Task
+                    sta       ,x
+                    lda       >FM11_L2_STATE+4
+                    sta       3,x
                     puls      cc,d,x,y,u,pc
 
                     fill      $00,(FM11_L2_FLIP0-FM11_L2_TRAMP)-(*-FM11TrImageStart)
@@ -215,7 +232,6 @@ FM11TrFlip0
                     sta       >FM11_L2_STATE+5
                     clra
                     sta       >DAT.Task
-                    sta       >FM11_L2_STATE
                     clr       <D.SSTskN
                     tfr       x,s
                     lda       >FM11_L2_STATE+5
