@@ -120,6 +120,11 @@ LowSub              equ       $0160     ; start of low memory subroutines
 SubStrt             equ       *         ; define assembler symbol SubStrt
 * D.Flip0 - switch to system task 0.
 R.Flip0             equ       *         ; define assembler symbol R.Flip0
+                  IFNE    fm11
+* FM-11 must switch maps from fixed CPU-card SRAM so the code performing
+* the switch cannot disappear with the old task mapping.
+                    jmp       >FM11_L2_FLIP0
+                  ELSE
                   IFNE    H6309   ; begin conditional assembly for H6309
                     aim       #$FE,<D.TINIT ; map type 0
                     lde       <D.TINIT  ; another 2 bytes saved if GrfDrv does: tfr cc,e
@@ -147,6 +152,7 @@ R.Flip0             equ       *         ; define assembler symbol R.Flip0
                     tfr       x,s       ; transfer X to the stack
                     tfr       a,cc      ; and A to CC
                     rts                 ; return to caller
+                  ENDC
 * Don't add any code here: See L0065, below.
 SubSiz              equ       *-SubStrt ; define assembler symbol SubSiz
 * Interrupt service routine
