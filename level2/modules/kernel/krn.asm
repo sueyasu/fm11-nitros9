@@ -1462,14 +1462,17 @@ S.Flip1             ldb       #2        ; get the tsk image entry number x2 for 
 * Set up the MMU in task 1, B=Task # to swap to, shifted left 1 bit.
 KrnWeGngBack        equ       *
                   IFNE    fm11
-* FM-11 diagnostic/safety mode: do not trust the task-1 DAT cache.
-* Always reload hardware task 1 from the selected software task's DAT
-* image before returning to user state.
+* Hardware task 1 caches the DAT image of the last software task selected.
+* F$SetTsk/F$DelTsk/F$RelTsk invalidate D.Task1N whenever that image can
+* become stale, so a matching tag means the hardware MMR bank is reusable.
+                    cmpb      <D.Task1N
+                    beq       FM11Task1Ready
                     stb       <D.Task1N
                     ldu       <D.TskIPt
                     ldu       b,u
                     ldb       #1
                     FM11_LOAD_TASK
+FM11Task1Ready
                     lda       #1
                     sta       <D.TINIT
                     rts
