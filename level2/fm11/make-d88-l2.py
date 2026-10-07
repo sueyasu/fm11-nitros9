@@ -2,9 +2,9 @@
 """Build the initial FM-11 NitrOS-9 Level 2 2D D88 image.
 
 Level 2 reserves T0/H0/S1-S4 for the ROM IPL and uses the following
-18 sectors for the $1200-byte REL/Boot/Krn kernel track:
+21 sectors for the $1200-byte REL/Boot/Krn kernel track:
   T0/H0/S5-S16 (12 sectors)
-  T0/H1/S1-S6  (6 sectors)
+  T0/H1/S1-S9  (9 sectors)
 
 RBF logical sector 0 begins at physical T1/H0/S1.
 """
@@ -21,7 +21,7 @@ SIDES = 2
 SPT = 16
 RBF_SIZE = 39 * 2 * 16 * SECTOR_SIZE
 IPL_SLOTS = 4
-KERNEL_SECTORS = 18
+KERNEL_SECTORS = 21
 
 
 def build_tracks(rbf: Path, ipl: Path, kerneltrack: Path):

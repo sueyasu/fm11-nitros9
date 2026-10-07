@@ -1,11 +1,15 @@
 ********************************************************************
 * REL - FM-11 Level 2 relocation routine, 8 KiB-pair DAT model
 *
-* The ROM IPL loads the fixed $1200-byte kernel track at $2600:
+* The ROM IPL loads a fixed $1500-byte kernel-track image at $2600:
 *
 *   $0000-$012F  REL
 *   $0130-$027F  Boot slot
-*   $0280-$11FF  Krn slot
+*   $0280-$147F  Krn slot
+*   $1480-$14FF  disk padding
+*
+* REL relocates only the first Bt.Size=$1480 bytes to $E780-$FBFF.
+* The final $80 bytes are deliberately not copied into fixed RAM.
 *
 * Task 0 is initialized as a 16-page 4 KiB identity map.  This is the
 * hardware representation of the standard eight-block 8 KiB system DAT.
@@ -20,7 +24,7 @@
 
 XX.Size             equ       6
 Offset              equ       Bt.Start+XX.Size
-KrnStart            equ       Bt.Start+$0280
+KrnStart            equ       $EA00
 VCT.Ct              equ       6
 VCT.Sz              equ       3
 

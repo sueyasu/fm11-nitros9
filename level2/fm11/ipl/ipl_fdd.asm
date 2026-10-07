@@ -23,7 +23,7 @@ DMA_ENABLE          equ       $04
 
 BOOT_DEST           equ       $2600
 BOOT_ENTRY          equ       $2602
-BOOT_SECTORS        equ       18
+BOOT_SECTORS        equ       21
 
 start               bra       main
                     fcb       0,0,0,0,0,0,0,0,0,0,0

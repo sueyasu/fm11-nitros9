@@ -95,8 +95,9 @@ build_one() {
 
     REL_SLOT=$((0x130))
     BOOT_SLOT=$((0x150))
-    KRN_SLOT=$((0xf80))
-    TRACK_SIZE=$((0x1200))
+    KRN_SLOT=$((0x1200))
+    TRACK_PAYLOAD=$((0x1480))
+    TRACK_SIZE=$((0x1500))
     TRAMP_SIZE=$((0xfff0-0xfe00))
 
     if [ "$IPLSIZE" -gt 512 ]; then
@@ -116,6 +117,12 @@ build_one() {
     pad_file "$OUT/krn" "$OUT/krn.slot" "$KRN_SLOT"
 
     cat "$OUT/rel" "$OUT/boot.slot" "$OUT/krn.slot" > "$OUT/kerneltrack-2d"
+    PAYLOADSIZE=$(wc -c < "$OUT/kerneltrack-2d" | tr -d ' ')
+    if [ "$PAYLOADSIZE" -ne "$TRACK_PAYLOAD" ]; then
+        echo "kernel payload size error: $PAYLOADSIZE (expected $TRACK_PAYLOAD)" >&2
+        exit 1
+    fi
+    truncate -s "$TRACK_SIZE" "$OUT/kerneltrack-2d"
     TRACKSIZE=$(wc -c < "$OUT/kerneltrack-2d" | tr -d ' ')
     if [ "$TRACKSIZE" -ne "$TRACK_SIZE" ]; then
         echo "kernel track size error: $TRACKSIZE (expected $TRACK_SIZE)" >&2

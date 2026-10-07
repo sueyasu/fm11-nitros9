@@ -17,16 +17,19 @@ PwrLnFrq            SET       50
 SHIFTBIT            EQU       %00000001
 
 ********************************************************************
-* Level 2 kernel-track placement
+* Level 2 kernel-track RAM placement
 *
-*   $EA00-$EB2F  REL   ($0130)
-*   $EB30-$EC7F  Boot  ($0150 slot)
-*   $EC80-$FBFF  Krn   ($0F80 slot maximum)
+* The 21-sector disk payload is $1500 bytes, but only the first $1480
+* bytes are relocated into RAM.  The final $0080 bytes remain disk padding.
+*
+*   $E780-$E8AF  REL   ($0130)
+*   $E8B0-$E9FF  Boot  ($0150 slot)
+*   $EA00-$FBFF  Krn   ($1200 slot maximum)
 *   $FC00-$FFFF  CPU-card fixed area
 ********************************************************************
 
-Bt.Start            EQU       $EA00
-Bt.Size             EQU       $1200
+Bt.Start            EQU       $E780
+Bt.Size             EQU       $1480
 
 ********************************************************************
 * FM-11 hardware MMR
