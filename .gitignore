@@ -34,6 +34,7 @@ picothing.fram
 *.rbf
 *.bin
 *.orig
+*.hdd
 /fm11-system-*.d88
 /fm11-system-*.rbf
 /level1/fm11/build-minimal-*/

@@ -109,10 +109,10 @@ build_one() {
     KRNP2SIZE=$(wc -c < "$OUT/krnp2" | tr -d ' ')
     TRAMPSIZE=$(wc -c < "$OUT/fm11tramp.bin" | tr -d ' ')
 
-    REL_SLOT=$((0x130))
-    BOOT_SLOT=$((0x150))
+    REL_SLOT=$((0x0a0))
+    BOOT_SLOT=$((0x260))
     KRN_SLOT=$((0x1200))
-    TRACK_PAYLOAD=$((0x1480))
+    TRACK_PAYLOAD=$((0x1500))
     TRACK_SIZE=$((0x1500))
     TRAMP_SIZE=$((0xfff0-0xfe00))
 

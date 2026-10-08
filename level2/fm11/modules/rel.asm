@@ -2,12 +2,11 @@
 * REL - FM-11 Level 2 bootstrap routine, 8 KiB-pair DAT model
 *
 * The ROM IPL loads the fixed $1500-byte kernel-track image directly
-* at $E000:
+* at FM11_L2_REL_BASE:
 *
-*   $0000-$012F  REL
-*   $0130-$027F  Boot slot
-*   $0280-$147F  Krn slot
-*   $1480-$14FF  disk padding
+*   $0000-$009F  REL
+*   $00A0-$02FF  Boot slot
+*   $0300-$14FF  Krn slot
 *
 * Task 0 is initialized as a 16-page 4 KiB identity map.  This is the
 * hardware representation of the standard eight-block 8 KiB system DAT.
@@ -125,7 +124,7 @@ Crash               lda       #'!
                     bsr       BtDebug
 CrashLoop           bra       CrashLoop
 
-Filler              fill      $00,$130-XX.Size-3-*
+Filler              fill      $00,FM11_L2_REL_SLOT-XX.Size-3-*
 
                     emod
 eom                 equ       *
