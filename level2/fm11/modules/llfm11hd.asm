@@ -5,8 +5,8 @@
 * Level 1 binary-sector-address protocol, but DMA channel 2 addresses
 * are translated through the active Level 2 4 KiB MMR mapping.
 *
-* HDD boot/install private SetStat services are intentionally omitted
-* here.  This version provides normal RBF read/write access only.
+* Private SetStat services write the ROM IPL and the 21-sector Level 2
+* kernel track into the reserved physical boot area.
 ********************************************************************
 
                     nam       llfm11hd
@@ -296,8 +296,26 @@ GS_Unknown          orcc      #Carry
                     ldb       #E$UnkSvc
                     rts
 
+HDWriteAsset        stx       V.LocalBuf,u
+                    sta       V.LocalSect+2,u
+                    clr       V.LocalSect,u
+                    clr       V.LocalSect+1,u
+                    stb       V.LocalCnt,u
+HDWA_Loop           lbsr      WriteSector
+                    bcs       HDWA_Exit
+                    lbsr      Advance
+                    dec       V.LocalCnt,u
+                    bne       HDWA_Loop
+                    clrb
+                    andcc     #^Carry
+HDWA_Exit           rts
+
 ll_setstat          ldx       PD.RGS,y
                     lda       R$B,x
+                    cmpa      #SS.FM11HDIPL
+                    beq       SS_HDIPL
+                    cmpa      #SS.FM11HDBoot
+                    beq       SS_HDBoot
                     cmpa      #SS.SQD
                     beq       SS_OK
                     cmpa      #SS.Reset
@@ -305,6 +323,14 @@ ll_setstat          ldx       PD.RGS,y
                     orcc      #Carry
                     ldb       #E$UnkSvc
                     rts
+SS_HDIPL            ldx       R$X,x
+                    clra
+                    ldb       #2
+                    bra       HDWriteAsset
+SS_HDBoot           ldx       R$X,x
+                    lda       #2
+                    ldb       #21
+                    bra       HDWriteAsset
 SS_OK               clrb
                     andcc     #^Carry
                     rts

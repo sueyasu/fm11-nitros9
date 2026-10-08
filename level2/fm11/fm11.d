@@ -205,6 +205,10 @@ FM11_MDC_SETCMASK   EQU       $11
 FM11_MDC_READ       EQU       $22
 FM11_MDC_WRITE      EQU       $23
 
+* Private services used to install the HDD bootstrap area.
+SS.FM11HDIPL        EQU       $92
+SS.FM11HDBoot       EQU       $93
+
 FM11_DMA2_ADDR_H    EQU       $FD96
 FM11_DMA2_ADDR_M    EQU       $FD48
 FM11_DMA2_ADDR_L    EQU       $FD49

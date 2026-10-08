@@ -46,7 +46,7 @@ build_one() {
 -Dfm11=1 -DH6309=$H6309 \
 -DNOS9VER=$NOS9VER -DNOS9MAJ=$NOS9MAJ -DNOS9MIN=$NOS9MIN"
 
-    for src in llfm11 llfm11hd h0_m2230b_fm11 h0_m2231b_fm11 h0_m2232b_fm11 h0_m2233b_fm11 h0_m2234b_fm11 h0_m2235b_fm11 h0_m2241b_fm11 h0_m2242b_fm11 h0_m2243b_fm11 d0_fm11 d1_fm11 d2_fm11 d3_fm11 d0_2hd_fm11 d1_2hd_fm11 d2_2hd_fm11 d3_2hd_fm11 dd_fm11 dd_2hd_fm11 md0_fm11 md1_fm11 nd0_fm11 nd1_fm11 fm11serial t1_fm11 init_fm11; do
+    for src in llfm11 llfm11hd h0_m2230b_fm11 h0_m2231b_fm11 h0_m2232b_fm11 h0_m2233b_fm11 h0_m2234b_fm11 h0_m2235b_fm11 h0_m2241b_fm11 h0_m2242b_fm11 h0_m2243b_fm11 dd_m2230b_fm11 dd_m2231b_fm11 dd_m2232b_fm11 dd_m2233b_fm11 dd_m2234b_fm11 dd_m2235b_fm11 dd_m2241b_fm11 dd_m2242b_fm11 dd_m2243b_fm11 d0_fm11 d1_fm11 d2_fm11 d3_fm11 d0_2hd_fm11 d1_2hd_fm11 d2_2hd_fm11 d3_2hd_fm11 dd_fm11 dd_2hd_fm11 md0_fm11 md1_fm11 nd0_fm11 nd1_fm11 fm11serial t1_fm11 init_fm11; do
         # shellcheck disable=SC2086
         $ASBASE --format=os9 --output="$OUT/$src" "$FM/modules/$src.asm"
     done
@@ -65,7 +65,8 @@ build_one() {
     $ASBASE --format=os9 --output="$OUT/pipe" "$ROOT/level1/modules/pipe.asm"
 
     echo "FM-11 Level 2 $CPU bring-up modules:"
-    for f in llfm11 llfm11hd h0_m2230b_fm11 h0_m2231b_fm11 h0_m2232b_fm11 h0_m2233b_fm11 h0_m2234b_fm11 h0_m2235b_fm11 h0_m2241b_fm11 h0_m2242b_fm11 h0_m2243b_fm11 d0_fm11 d1_fm11 d2_fm11 d3_fm11 d0_2hd_fm11 d1_2hd_fm11 d2_2hd_fm11 d3_2hd_fm11 dd_fm11 dd_2hd_fm11 md0_fm11 md1_fm11 nd0_fm11 nd1_fm11 fm11serial t1_fm11 init_fm11 pipeman piper pipe; do
+    for f in llfm11 llfm11hd h0_m2230b_fm11 h0_m2231b_fm11 h0_m2232b_fm11 h0_m2233b_fm11 h0_m2234b_fm11 h0_m2235b_fm11 h0_m2241b_fm11 h0_m2242b_fm11 h0_m2243b_fm11 dd_m2230b_fm11 dd_m2231b_fm11 dd_m2232b_fm11 dd_m2233b_fm11 dd_m2234b_fm11 dd_m2235b_fm11 dd_m2241b_fm11 dd_m2242b_fm11 dd_m2243b_fm11 d0_fm11 d1_fm11 d2_fm11 d3_fm11 d0_2hd_fm11 d1_2hd_fm11 d2_2hd_fm11 d3_2hd_fm11 dd_fm11 dd_2hd_fm11 md0_fm11 md1_fm11 nd0_fm11 nd1_fm11 fm11serial t1_fm11 init_fm11 pipeman piper pipe; do
+
         size=$(wc -c < "$OUT/$f" | tr -d ' ')
         printf '  %-12s %s bytes\n' "$f:" "$size"
     done

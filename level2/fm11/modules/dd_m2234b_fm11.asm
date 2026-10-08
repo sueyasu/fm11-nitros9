@@ -1,9 +1,9 @@
 ********************************************************************
-* H0 - FM-11 MDC hard disk 0, Fujitsu M2234B profile
+* DD - FM-11 Level 2 MDC boot hard disk, Fujitsu M2234B profile
 ********************************************************************
 
-                    nam       H0
-                    ttl       FM-11 Level 2 /H0 M2234B hard disk descriptor
+                    nam       DD
+                    ttl       FM-11 Level 2 /DD M2234B hard disk descriptor
 
                     ifp1
                     use       defsfile
@@ -38,12 +38,12 @@ edition             set       1
                     fcb       0                   IT.SToff
                     fcb       0                   IT.SOFF1
                     fcb       0                   IT.SOFF2
-                    fcb       23                  IT.SOFF3; sectors 0-22 reserved for L2 boot
+                    fcb       23                  IT.SOFF3; sectors 0-22 reserved
 initsize            equ       *
                     fdb       lldrv               IT.LLDRV
                     fcb       $FF                 IT.MPI
 
-name                fcs       /H0/
+name                fcs       /DD/
 mgrnam              fcs       /RBF/
 drvnam              fcs       /RBSuper/
 lldrv               fcs       /llfm11hd/
