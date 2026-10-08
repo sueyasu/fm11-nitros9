@@ -4,7 +4,7 @@
 * The FM-11 1MB-FDD bootstrap loads T0/H0/S1-S4 as four native
 * 128-byte FM sectors (512 bytes total) at $0400 and jumps to $0400.
 * This IPL loads the 21-sector Level 2 REL/Boot/Krn image from
-* T0/H1/S1-S21 (256-byte MFM) to $2600 and jumps to $2602.
+* T0/H1/S1-S21 (256-byte MFM) to $E000 and jumps to $E002.
 * The complete cylinder 0 is reserved from RBF.
 ********************************************************************
 
@@ -23,8 +23,8 @@ FDC_DRQ             equ       $02
 FDC_ERRMASK         equ       $90
 DMA_ENABLE          equ       $04
 
-BOOT_DEST           equ       $2600
-BOOT_ENTRY          equ       $2602
+BOOT_DEST           equ       $E100
+BOOT_ENTRY          equ       $E102
 BOOT_SECTORS        equ       21
 
 start               bra       main

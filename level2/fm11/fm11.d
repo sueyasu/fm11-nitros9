@@ -19,16 +19,17 @@ SHIFTBIT            EQU       %00000001
 ********************************************************************
 * Level 2 kernel-track RAM placement
 *
-* The 21-sector disk payload is $1500 bytes, but only the first $1480
-* bytes are relocated into RAM.  The final $0080 bytes remain disk padding.
+* The IPL loads the 21-sector disk payload directly at $E000.  The first
+* $1480 bytes contain REL/Boot/Krn; the final $0080 bytes are disk padding.
 *
-*   $E780-$E8AF  REL   ($0130)
-*   $E8B0-$E9FF  Boot  ($0150 slot)
-*   $EA00-$FBFF  Krn   ($1200 slot maximum)
+*   $E000-$E12F  REL   ($0130)
+*   $E130-$E27F  Boot  ($0150 slot)
+*   $E280-$F47F  Krn   ($1200 slot maximum)
+*   $F480-$F4FF  disk padding ($0080)
 *   $FC00-$FFFF  CPU-card fixed area
 ********************************************************************
 
-FM11_L2_REL_BASE    EQU $E780
+FM11_L2_REL_BASE    EQU $E100
 FM11_L2_REL_SLOT    EQU $0130
 FM11_L2_BOOT_BASE   EQU FM11_L2_REL_BASE+FM11_L2_REL_SLOT
 FM11_L2_BOOT_SLOT   EQU $0150

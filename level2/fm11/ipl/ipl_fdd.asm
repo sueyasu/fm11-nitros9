@@ -3,7 +3,7 @@
 *
 * The FM-11 ROM loads T0/H0/S1-S2 (512 bytes) at $0400 and jumps to
 * $0400.  S3-S4 remain reserved.  The Level 2 kernel track begins at S5
-* and is 18 x 256-byte sectors ($1200).
+* and is loaded directly at $E000.
 ********************************************************************
 
                     org       $0400
@@ -21,8 +21,8 @@ FDC_DRQ             equ       $02
 FDC_ERRMASK         equ       $90
 DMA_ENABLE          equ       $04
 
-BOOT_DEST           equ       $2600
-BOOT_ENTRY          equ       $2602
+BOOT_DEST           equ       $E100
+BOOT_ENTRY          equ       $E102
 BOOT_SECTORS        equ       21
 
 start               bra       main

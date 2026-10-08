@@ -3,7 +3,7 @@
 *
 * FM-11 ROM loads physical HDD sectors 0-1 (512 bytes) at $0400 and
 * jumps to $0400.  This IPL loads the 21-sector Level 2 kernel track
-* from physical sectors 2-22 at $2600 and jumps to $2602.
+* from physical sectors 2-22 at $E000 and jumps to $E002.
 ********************************************************************
                     org       $0400
 
@@ -29,8 +29,8 @@ MDCError            equ       $80
 MDCBinaryMask       equ       $70
 MDCDMA2Select       equ       $20
 
-BOOT_DEST           equ       $2600
-BOOT_ENTRY          equ       $2602
+BOOT_DEST           equ       $E100
+BOOT_ENTRY          equ       $E102
 BOOT_FIRST_SECTOR   equ       2
 BOOT_SECTORS        equ       21
 BOOT_END_SECTOR     equ       BOOT_FIRST_SECTOR+BOOT_SECTORS
