@@ -172,13 +172,13 @@ need_tool lwasm
 need_tool os9
 need_tool python3
 
-CPU=${1:-}
-MEDIA=${2:-}
-case "$CPU" in
-    6809|6309) build_cpu "$CPU" "$MEDIA" ;;
+CPUSEL=${1:-}
+MEDIASEL_TOP=${2:-}
+case "$CPUSEL" in
+    6809|6309) build_cpu "$CPUSEL" "$MEDIASEL_TOP" ;;
     all)
-        build_cpu 6809 "$MEDIA"
-        build_cpu 6309 "$MEDIA"
+        build_cpu 6809 "$MEDIASEL_TOP"
+        build_cpu 6309 "$MEDIASEL_TOP"
         ;;
     *) usage ;;
 esac
