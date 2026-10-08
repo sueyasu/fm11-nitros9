@@ -114,7 +114,8 @@ build_model() {
         llfm11 llfm11hd "dd_${MODEL}_fm11" "h0_${MODEL}_fm11" \
         d0_fm11 d1_fm11 d2_fm11 d3_fm11 \
         md0_fm11 md1_fm11 nd0_fm11 nd1_fm11 \
-        scf fm11serial t1_fm11 clock clock2_soft sysgo \
+        scf fm11console term_fm11 \
+        fm11serial t1_fm11 clock clock2_soft sysgo \
         pipeman piper pipe shell
     do
         if [ ! -f "$OUT/$module" ]; then

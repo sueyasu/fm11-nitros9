@@ -1,8 +1,8 @@
 ********************************************************************
 * Init - FM-11 NitrOS-9 Level 2 bring-up configuration
 *
-* Initial Level 2 target deliberately uses /T1 as the console so the
-* display subsystem is not part of the first 2D boot milestone.
+* The local FM-11 display/keyboard device /Term is the default console.
+* /T1 remains resident as a serial diagnostic/login terminal.
 ********************************************************************
 
                     nam       Init
@@ -42,8 +42,8 @@ start               equ       *
                     fcb       0,0
 
 * Level 2 configuration tail: MonType, MouseInf, KeyRptS, KeyRptD.
-* FM-11 initial serial-console bring-up has no display/mouse subsystem,
-* but these five bytes are still part of the Level 2 Init ABI.
+* FM-11 has no Level 2 graphics/mouse subsystem yet, but these five
+* bytes are still part of the Level 2 Init ABI.
                     fcb       0
                     fcb       0,1
                     fcb       $1E
@@ -54,7 +54,7 @@ name                fcs       /Init/
 
 DefProg             fcs       /SysGo/
 DefDev              fcs       "/DD"
-DefCons             fcs       "/T1"
+DefCons             fcs       "/Term"
 DefBoot             fcs       /Boot/
 
 OSStr               fcc       "NitrOS-9/"
