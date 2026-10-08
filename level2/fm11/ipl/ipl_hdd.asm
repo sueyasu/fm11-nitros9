@@ -36,7 +36,7 @@ BOOT_SECTORS        equ       21
 BOOT_END_SECTOR     equ       BOOT_FIRST_SECTOR+BOOT_SECTORS
 
 start               orcc      #$50
-                    lds       #$3F00
+                    lds       #$2500
                     lda       #MDCDMA2Select
                     sta       >FM11_MDC_SELECT
                     lda       #FM11_MDC_SETCMASK

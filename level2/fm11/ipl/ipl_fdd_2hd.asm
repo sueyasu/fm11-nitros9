@@ -31,7 +31,7 @@ start               bra       main
                     fcb       0,0,0,0,0,0,0,0,0,0,0
 
 main                orcc      #$50
-                    lds       #$3F00
+                    lds       #$2500
                     clr       >FM11_FDC_DRIVE
 
 * Keep the bootstrap independent of DMA state.
