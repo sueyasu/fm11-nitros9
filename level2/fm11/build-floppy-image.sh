@@ -56,7 +56,7 @@ build_cpu() {
     }
 
     build "$ROOT/level1/modules/ioman.asm"       ioman
-    build "$ROOT/level1/modules/rbsuper.asm"     rbsuper -Dwildbits=1 -DDrvCount=4
+    build "$ROOT/level1/modules/rbsuper.asm"     rbsuper -Dwildbits=1 -DDrvCount=5
     build "$ROOT/level1/modules/scf.asm"         scf
     build "$ROOT/level2/modules/clock.asm"       clock
     build "$ROOT/level1/modules/clock2_soft.asm" clock2_soft
@@ -146,6 +146,18 @@ build_media() {
         dst=${item#*:}
         os9 copy -o=0 "$OUT/$src" "$RBF,CMDS/$dst"
         os9 attr "$RBF,CMDS/$dst" -e -pe >/dev/null
+    done
+
+    # Keep all supported H0 profiles in /SYS/MODULES.  M2233B alone is
+    # resident in the default OS9Boot; the others are alternate source modules.
+    os9 makdir "$RBF,SYS"
+    os9 makdir "$RBF,SYS/MODULES"
+    for module in llfm11hd \
+        h0_m2230b_fm11 h0_m2231b_fm11 h0_m2232b_fm11 \
+        h0_m2233b_fm11 h0_m2234b_fm11 h0_m2235b_fm11 \
+        h0_m2241b_fm11 h0_m2242b_fm11 h0_m2243b_fm11
+    do
+        os9 copy -o=0 "$OUT/$module" "$RBF,SYS/MODULES/$module"
     done
 
     python3 "$ROOT/patch-boot-descriptor.py" "$RBF"

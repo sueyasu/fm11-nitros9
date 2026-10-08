@@ -192,6 +192,26 @@ FM11_DMA1_COUNT_H   EQU       $FD46
 FM11_DMA1_COUNT_L   EQU       $FD47
 FM11_DMA1_MODE      EQU       $FD51
 
+********************************************************************
+* Magnetic Disk Controller and DMA channel 2
+********************************************************************
+
+FM11_MDC_CMD        EQU       $FDC0
+FM11_MDC_STATUS     EQU       $FDC0
+FM11_MDC_DATA       EQU       $FDC1
+FM11_MDC_SELECT     EQU       $FDC2
+FM11_MDC_AUX        EQU       $FDC3
+FM11_MDC_SETCMASK   EQU       $11
+FM11_MDC_READ       EQU       $22
+FM11_MDC_WRITE      EQU       $23
+
+FM11_DMA2_ADDR_H    EQU       $FD96
+FM11_DMA2_ADDR_M    EQU       $FD48
+FM11_DMA2_ADDR_L    EQU       $FD49
+FM11_DMA2_COUNT_H   EQU       $FD4A
+FM11_DMA2_COUNT_L   EQU       $FD4B
+FM11_DMA2_MODE      EQU       $FD52
+
 FM11_DMA_DIR_WRITE  EQU       $01
 FM11_DMA_ENABLE     EQU       $04
 FM11_DMA_ERROR      EQU       $40
