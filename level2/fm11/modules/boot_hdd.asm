@@ -33,7 +33,6 @@ bootsize            rmb       2
 LSN0Ptr             rmb       2
 ddtks               rmb       1
 ddfmt               rmb       1
-hwlba               rmb       3
 size                equ       .
 
 name                fcs       /Boot/
@@ -42,16 +41,19 @@ name                fcs       /Boot/
 LSN24BIT            equ       1
 FLOPPY              equ       0
 
-* The HDD IPL has already selected DMA2 and put the MDC into binary-sector
-* address mode immediately before loading REL/Boot.  Repeating SETCMASK here
-* costs 22 bytes and is unnecessary on the only path that can enter this
-* booter.  Preserve that controller state and merely report successful init.
-HWInit              andcc     #^Carry
-                    rts
+* Re-establish binary sector addressing for the OS9Boot phase.  The IPL also
+* selects this mode, but the Boot module must not depend on controller state
+* surviving the intervening REL/kernel initialization.
+HWInit              lda       #MDCDMA2Select
+                    sta       >FM11_MDC_SELECT
+                    lda       #FM11_MDC_SETCMASK
+                    sta       >FM11_MDC_CMD
+                    lda       #MDCBinaryMask
+                    sta       >FM11_MDC_DATA
+                    clr       >FM11_MDC_DATA
+                    lbra      WaitResult
 
-HWTerm              clrb
-                    andcc     #^Carry
-                    rts
+HWTerm              rts
 
                     use       boot_common.asm
 
@@ -64,8 +66,7 @@ HWRead              pshs      b
                     tfr       d,x
                     puls      b
                     adcb      #0
-                    stb       hwlba,u
-                    stx       hwlba+1,u
+                    pshs      b,x
 
                     ldx       blockloc,u
                     clr       >FM11_DMA2_ADDR_H
@@ -81,17 +82,16 @@ HWRead              pshs      b
                     clr       >FM11_MDC_DATA
                     clr       >FM11_MDC_DATA
                     clr       >FM11_MDC_DATA
-                    lda       hwlba,u
+                    puls      b,x
+                    stb       >FM11_MDC_DATA
+                    tfr       x,d
                     sta       >FM11_MDC_DATA
-                    lda       hwlba+1,u
-                    sta       >FM11_MDC_DATA
-                    lda       hwlba+2,u
-                    sta       >FM11_MDC_DATA
+                    stb       >FM11_MDC_DATA
                     lda       #1
                     sta       >FM11_MDC_DATA
                     clr       >FM11_MDC_DATA
 
-                    lbsr      WaitResult
+                    bsr       WaitResult
                     bcs       HWR_Bad
                     lda       >FM11_DMA2_MODE
                     bita      #FM11_DMA_ERROR
@@ -99,21 +99,17 @@ HWRead              pshs      b
                     bita      #FM11_DMA_DONE
                     beq       HWR_Bad
                     ldx       blockloc,u
-                    clrb
-                    andcc     #^Carry
                     rts
 HWR_Bad             orcc      #Carry
                     ldb       #E$Read
                     rts
 
-WaitResult          pshs      x
-                    ldx       #$FFFF
+WaitResult          ldx       #$FFFF
 WR_Wait             lda       >FM11_MDC_STATUS
                     bita      #MDCResultReady
                     bne       WR_Ready
                     leax      -1,x
                     bne       WR_Wait
-                    puls      x
                     orcc      #Carry
                     ldb       #E$NotRdy
                     rts
@@ -124,7 +120,6 @@ WR_Drain            lda       >FM11_MDC_DATA
                     decb
                     bne       WR_Drain
                     puls      a
-                    puls      x
                     bita      #MDCError
                     bne       WR_Error
                     clrb
