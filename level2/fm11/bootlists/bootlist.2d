@@ -1,6 +1,9 @@
 # FM-11 NitrOS-9 Level 2 initial 2D bootfile
 # Order follows the standard Level 2 kernel/system ordering, then
 # the minimal RBF/SCF/clock stack needed for /DD and /T1.
+# Logical floppy mapping:
+#   /MD0=/D0=/DD, /MD1=/D1
+#   /ND0=/D2,     /ND1=/D3
 krnp2
 fm11trampmod
 ioman
@@ -10,9 +13,18 @@ rbsuper
 llfm11
 dd_fm11
 d0_fm11
+d1_fm11
+d2_fm11
+d3_fm11
 md0_fm11
+d1_fm11
+d2_fm11
+d3_fm11
 md1_fm11
 nd0_fm11
+d1_fm11
+d2_fm11
+d3_fm11
 nd1_fm11
 scf
 fm11serial

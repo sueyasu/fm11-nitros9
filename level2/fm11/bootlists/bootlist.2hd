@@ -1,4 +1,7 @@
 # FM-11 NitrOS-9 Level 2 initial 2HD bootfile
+# Logical floppy mapping:
+#   /ND0=/D0=/DD, /ND1=/D1
+#   /MD0=/D2,     /MD1=/D3
 krnp2
 fm11trampmod
 ioman
@@ -8,6 +11,9 @@ rbsuper
 llfm11
 dd_2hd_fm11
 d0_2hd_fm11
+d1_2hd_fm11
+d2_2hd_fm11
+d3_2hd_fm11
 md0_fm11
 md1_fm11
 nd0_fm11
