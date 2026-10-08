@@ -58,8 +58,9 @@ HWTerm              rts
                     use       boot_common.asm
 
 * Entry: B,X = 24-bit RBF LSN; blockloc,U = destination.
-* At this stage the boot image still runs in the initial identity mapping,
-* so blockloc is also the physical DMA address.
+* blockloc is a Level 2 logical address.  DMA2 addresses physical memory,
+* so translate blockloc through the currently active 4 KiB MMR before each
+* sector transfer.
 HWRead              pshs      b
                     tfr       x,d
                     addd      #BootReserveSectors
@@ -69,13 +70,7 @@ HWRead              pshs      b
                     pshs      b,x
 
                     ldx       blockloc,u
-                    clr       >FM11_DMA2_ADDR_H
-                    stx       >FM11_DMA2_ADDR_M
-                    lda       #1
-                    sta       >FM11_DMA2_COUNT_H
-                    clr       >FM11_DMA2_COUNT_L
-                    lda       #FM11_DMA_ENABLE
-                    sta       >FM11_DMA2_MODE
+                    bsr       SetupDMA2
 
                     lda       #FM11_MDC_READ
                     sta       >FM11_MDC_CMD
@@ -102,6 +97,49 @@ HWRead              pshs      b
                     rts
 HWR_Bad             orcc      #Carry
                     ldb       #E$Read
+                    rts
+
+********************************************************************
+* SetupDMA2
+*
+* Entry:
+*   X = Level 2 logical buffer address
+*
+* DMA2 sees physical memory, not the CPU logical address.  Translate X
+* through the active FM-11 4 KiB MMR.  This is the read-only boot-time
+* equivalent of llfm11hd::SetupDMA2.
+********************************************************************
+SetupDMA2           tfr       x,d
+                    stb       >FM11_DMA2_ADDR_L
+                    pshs      a
+                    lsra
+                    lsra
+                    lsra
+                    lsra
+                    ldx       #FM11_MMR_BASE
+                    lda       a,x
+                    tfr       a,b
+                    lsra
+                    lsra
+                    lsra
+                    lsra
+                    sta       >FM11_DMA2_ADDR_H
+                    andb      #$0F
+                    lslb
+                    lslb
+                    lslb
+                    lslb
+                    puls      a
+                    anda      #$0F
+                    pshs      b
+                    ora       ,s+
+                    sta       >FM11_DMA2_ADDR_M
+
+                    lda       #1
+                    sta       >FM11_DMA2_COUNT_H
+                    clr       >FM11_DMA2_COUNT_L
+                    lda       #FM11_DMA_ENABLE
+                    sta       >FM11_DMA2_MODE
                     rts
 
 WaitResult          ldx       #$FFFF
