@@ -24,7 +24,7 @@
 
 XX.Size             equ       6
 Offset              equ       Bt.Start+XX.Size
-KrnStart            equ       $EA00
+KrnStart            equ       FM11_L2_KRN_BASE
 VCT.Ct              equ       6
 VCT.Sz              equ       3
 

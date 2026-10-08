@@ -55,7 +55,7 @@ Edition             set       20        ; module Edition
 
 * The absolute address of where Kernel starts in memory.
                   IFNE    fm11
-Where               equ       $EA00     ; FM-11: $EA00-$FBFF, below fixed $FC00 area
+Where               equ       FM11_L2_KRN_BASE ; FM-11: derived from REL/Boot layout
                   ELSE
                   IFNE    picothing ; begin conditional assembly for picothing
 Where               equ       $EC00     ; picothing

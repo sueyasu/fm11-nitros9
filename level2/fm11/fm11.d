@@ -28,8 +28,15 @@ SHIFTBIT            EQU       %00000001
 *   $FC00-$FFFF  CPU-card fixed area
 ********************************************************************
 
-Bt.Start            EQU       $E780
-Bt.Size             EQU       $1480
+FM11_L2_REL_BASE    EQU $E780
+FM11_L2_REL_SLOT    EQU $0130
+FM11_L2_BOOT_BASE   EQU FM11_L2_REL_BASE+FM11_L2_REL_SLOT
+FM11_L2_BOOT_SLOT   EQU $0150
+FM11_L2_KRN_BASE    EQU FM11_L2_BOOT_BASE+FM11_L2_BOOT_SLOT
+FM11_L2_KRN_SLOT    EQU $1200
+
+Bt.Start            EQU FM11_L2_REL_BASE
+Bt.Size             EQU FM11_L2_REL_SLOT+FM11_L2_BOOT_SLOT+FM11_L2_KRN_SLOT
 
 ********************************************************************
 * FM-11 hardware MMR
