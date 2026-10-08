@@ -196,6 +196,9 @@ nsrc@               lda       1,s       ; get the destination page (slot 6)
                     leau      >DAT.BlSz,u ; write the destination via the fixed window
 ndst@               puls      y         ; reload the (possibly adjusted) pages
                   ENDC
+                  IFNE    fm11
+                    pshs      cc        ; preserve caller IRQ/FIRQ state
+                  ENDC
                     orcc      #IntMasks ; shut IRQ's off
                     stb       <D.IRQTmp+1 ; save copy of current copy block size
                   IFNE    fm11
@@ -252,7 +255,11 @@ usrc@               ldd       [6,s]     ; this pass's destination image entry
                     leau      >-DAT.BlSz,u ; bias U back to the slot 6 window
 udst@               equ       *         ; both pointers window-relative again
                   ENDC
+                  IFNE    fm11
+                    puls      cc        ; restore caller IRQ/FIRQ state
+                  ELSE
                     andcc     #^IntMasks ; turn IRQ's back on
+                  ENDC
                     ldd       14,s      ; get # of bytes left to copy
                     subd      12,s      ; subtract # bytes we copied
                     beq       FMovePurge ; done Move
