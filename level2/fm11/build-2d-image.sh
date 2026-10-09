@@ -112,6 +112,10 @@ build_one() {
     # More uses the FM-11 ANSI/VT100 variant already proven on Level 1.
     build "$ROOT/level1/fm11/cmds/more.asm"        more
 
+    # FM-11 screen editors already ported and proven on Level 1.
+    build "$ROOT/level1/fm11/cmds/minted.asm"      minted
+    build "$ROOT/level1/fm11/cmds/ded.asm"         ded
+
     # pd.asm is the common source for Pwd and Pxd.
     build "$ROOT/level1/cmds/pd.asm"               pwd -DPWD=1
     build "$ROOT/level1/cmds/pd.asm"               pxd -DPXD=1
@@ -163,7 +167,7 @@ build_one() {
         copy dsave cmp load unlink makdir del attr list free \
         build deiniz deldir devs dmode dump echo ident iniz link \
         mdir merge prompt rename save setime tee touch tsmon verify \
-        dirsort binex exbin disasm edit more dcheck backup pwd pxd
+        dirsort binex exbin disasm edit more dcheck backup pwd pxd minted ded
     do
         case "$cmd" in
             copy)   diskname=Copy ;;
@@ -206,6 +210,8 @@ build_one() {
             backup) diskname=Backup ;;
             pwd)    diskname=Pwd ;;
             pxd)    diskname=Pxd ;;
+            minted) diskname=MinTED ;;
+            ded)    diskname=dEd ;;
         esac
         os9 copy -o=0 "$OUT/$cmd" "$RBF,CMDS/$diskname"
         os9 attr "$RBF,CMDS/$diskname" -e -pe >/dev/null

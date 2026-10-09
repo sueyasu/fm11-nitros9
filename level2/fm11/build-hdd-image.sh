@@ -108,6 +108,10 @@ build_cpu() {
     # More uses the FM-11 ANSI/VT100 variant already proven on Level 1.
     build "$ROOT/level1/fm11/cmds/more.asm"        more
 
+    # FM-11 screen editors already ported and proven on Level 1.
+    build "$ROOT/level1/fm11/cmds/minted.asm"      minted
+    build "$ROOT/level1/fm11/cmds/ded.asm"         ded
+
     # pd.asm is the common source for Pwd and Pxd.
     build "$ROOT/level1/cmds/pd.asm"               pwd -DPWD=1
     build "$ROOT/level1/cmds/pd.asm"               pxd -DPXD=1
@@ -178,7 +182,8 @@ build_model() {
         merge:Merge prompt:Prompt rename:Rename save:Save setime:Setime \
         tee:Tee touch:Touch tsmon:TSMon verify:Verify \
         dirsort:DirSort binex:Binex exbin:Exbin disasm:Disasm edit:Edit \
-        more:More dcheck:DCheck backup:Backup pwd:Pwd pxd:Pxd
+        more:More dcheck:DCheck backup:Backup pwd:Pwd pxd:Pxd \
+        minted:MinTED ded:dEd
     do
         src=${item%%:*}
         dst=${item#*:}
