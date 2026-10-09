@@ -3,7 +3,7 @@
 *
 * This is deliberately separate from the Level 1 FM-11 source.  It uses
 * the common NitrOS-9 boot_common implementation with the FM-11 2D
-* MiniFDC PIO backend.
+* MiniFDC DMA0 backend.
 ********************************************************************
 
                     nam       Boot
@@ -78,44 +78,76 @@ HWGotSide           stb       >FM11_MFDC_SIDE
                     stb       >FM11_MFDC_SECTOR
                     clr       >FM11_MFDC_DRIVE
 
-                    lda       >FM11_DMA0_MODE
-                    anda      #^FM11_DMA_ENABLE
-                    sta       >FM11_DMA0_MODE
-
+                    pshs      cc
+                    orcc      #IntMasks
+                    ldx       blockloc,u
+                    bsr       SetupDMA0
                     lda       #FM11_MFDC_READSEC
                     sta       >FM11_MFDC_CMD
+                    puls      cc
 
-                    ldx       blockloc,u
-                    pshs      y,u
-                    ldy       #256
-HWReadByte          ldu       #0
-HWWaitDRQ           lda       >FM11_MFDC_STATUS
-                    bita      #FM11_MFDC_ERRMASK
-                    bne       HWReadErrorSaved
-                    bita      #FM11_MFDC_DRQ
-                    bne       HWHavByte
-                    leau      -1,u
-                    cmpu      #0
-                    bne       HWWaitDRQ
-                    bra       HWReadErrorSaved
-HWHavByte           lda       >FM11_MFDC_DATA
-                    sta       ,x+
-                    leay      -1,y
-                    bne       HWReadByte
-
+                    bsr       DMA0Wait
+                    bcs       HWReadError
                     lda       >FM11_MFDC_STATUS
                     bita      #FM11_MFDC_ERRMASK
-                    bne       HWReadErrorSaved
+                    bne       HWReadError
 
-                    puls      y,u
                     ldx       blockloc,u
                     clrb
                     andcc     #^Carry
                     rts
 
-HWReadErrorSaved    puls      y,u
-                    orcc      #Carry
+HWReadError         orcc      #Carry
                     ldb       #E$Read
+                    rts
+
+********************************************************************
+* SetupDMA0 - map a Level 2 logical buffer address to DMA0 physical.
+********************************************************************
+SetupDMA0           tfr       x,d
+                    stb       >FM11_DMA0_ADDR_L
+                    pshs      a
+                    lsra
+                    lsra
+                    lsra
+                    lsra
+                    ldx       #FM11_MMR_BASE
+                    lda       a,x
+                    tfr       a,b
+                    lsra
+                    lsra
+                    lsra
+                    lsra
+                    sta       >FM11_DMA0_ADDR_H
+                    andb      #$0F
+                    lslb
+                    lslb
+                    lslb
+                    lslb
+                    puls      a
+                    anda      #$0F
+                    pshs      b
+                    ora       ,s+
+                    sta       >FM11_DMA0_ADDR_M
+
+                    lda       #1
+                    sta       >FM11_DMA0_COUNT_H
+                    clr       >FM11_DMA0_COUNT_L
+                    lda       #FM11_DMA_ENABLE
+                    sta       >FM11_DMA0_MODE
+                    rts
+
+DMA0Wait            ldx       #$FFFF
+DMA0WaitLoop        lda       >FM11_DMA0_MODE
+                    bita      #FM11_DMA_ERROR
+                    bne       DMA0WaitError
+                    bita      #FM11_DMA_DONE
+                    bne       DMA0WaitDone
+                    leax      -1,x
+                    bne       DMA0WaitLoop
+DMA0WaitError       orcc      #Carry
+                    rts
+DMA0WaitDone        andcc     #^Carry
                     rts
 
 HWSectorError       orcc      #Carry
