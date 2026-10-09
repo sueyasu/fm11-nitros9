@@ -3,7 +3,7 @@
 *
 * FM-11 ROM loads physical HDD sectors 0-1 (512 bytes) at $0400 and
 * jumps to $0400.  This IPL loads physical sectors 2-18 (Bootp1.HD,
-* 17 x 256 bytes) at $2600 and jumps to $2602.
+* 17 x 256 bytes) directly at $EB00 and jumps to $EB02.
 ********************************************************************
                     org       $0400
 
@@ -42,7 +42,7 @@ start               lda       #MDCDMA2Select
                     bcs       fail
                     lda       #2
                     sta       sector
-                    ldx       #$2600
+                    ldx       #$EB00
 nextsec             clr       >FM11_DMA2_ADDR_H
                     stx       >FM11_DMA2_ADDR_M
                     lda       #1
@@ -74,7 +74,7 @@ nextsec             clr       >FM11_DMA2_ADDR_H
                     lda       sector
                     cmpa      #19
                     blo       nextsec
-                    jmp       $2602
+                    jmp       $EB02
 sector              fcb       2
 fail                bra       fail
 

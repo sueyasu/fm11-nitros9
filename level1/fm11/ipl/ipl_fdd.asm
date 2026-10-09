@@ -4,7 +4,7 @@
 * BOOT ROM loads only T0/H0/S1-S2 (2 x 256 bytes = 512 bytes) to $0400
 * and jumps to $0400.  The current NitrOS-9 disk layout deliberately keeps
 * S3-S4 reserved, so the boottrack still begins at S5.  This IPL loads
-* 17 boottrack sectors to $2600 and jumps to $2602.
+* 17 boottrack sectors directly to Bt.Start ($EB00) and jumps to $EB02.
 ********************************************************************
 
                     org       $0400
@@ -22,8 +22,8 @@ FDC_DRQ             equ       $02
 FDC_ERRMASK         equ       $90
 DMA_ENABLE          equ       $04
 
-BOOT_DEST           equ       $2600
-BOOT_ENTRY          equ       $2602
+BOOT_DEST           equ       $EB00
+BOOT_ENTRY          equ       $EB02
 BOOT_SECTORS        equ       17
 
 start               bra       main

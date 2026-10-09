@@ -4,7 +4,7 @@
 * The FM-11 1MB-FDD bootstrap loads T0/H0/S1-S4 as four native
 * 128-byte sectors (512 bytes total) at $0400.  This IPL loads the 17-sector NitrOS-9
 * boottrack from T0/H1/S1-S17 (256-byte MFM), then jumps
-* to $2602.  The complete cylinder 0 is reserved from RBF.
+* to $EB02 after loading it directly at $EB00.  The complete cylinder 0 is reserved from RBF.
 ********************************************************************
 
                     org       $0400
@@ -22,8 +22,8 @@ FDC_DRQ             equ       $02
 FDC_ERRMASK         equ       $90
 DMA_ENABLE          equ       $04
 
-BOOT_DEST           equ       $2600
-BOOT_ENTRY          equ       $2602
+BOOT_DEST           equ       $EB00
+BOOT_ENTRY          equ       $EB02
 BOOT_SECTORS        equ       17
 
 start               bra       main
