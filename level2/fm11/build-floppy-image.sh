@@ -79,6 +79,24 @@ build_cpu() {
     build "$ROOT/level1/cmds/list.asm"           list
     build "$ROOT/level1/cmds/free.asm"           free
 
+    # Additional standard commands used by the Level 1 FM-11 distribution.
+    # These are generic commands that do not require FM-11-specific low-level
+    # device services and can be shared with Level 2 as-is.
+    for cmd in \
+        build deiniz deldir devs dmode dump echo ident iniz link \
+        mdir merge prompt rename save setime tee touch tsmon verify \
+        dirsort binex exbin disasm edit dcheck backup
+    do
+        build "$ROOT/level1/cmds/$cmd.asm" "$cmd"
+    done
+
+    # More uses the FM-11 ANSI/VT100 variant already proven on Level 1.
+    build "$ROOT/level1/fm11/cmds/more.asm"        more
+
+    # pd.asm is the common source for Pwd and Pxd.
+    build "$ROOT/level1/cmds/pd.asm"               pwd -DPWD=1
+    build "$ROOT/level1/cmds/pd.asm"               pxd -DPXD=1
+
     case "$MEDIASEL" in
         2d|2hd) build_media "$CPU" "$MEDIASEL" "$OUT" ;;
         all)
@@ -140,7 +158,13 @@ build_media() {
     for item in \
         shell:Shell dir:Dir sleep:Sleep procs:Procs date:Date tmode:TMode \
         copy:Copy dsave:DSave cmp:Cmp load:Load unlink:Unlink \
-        makdir:MakDir del:Del attr:Attr list:List free:Free
+        makdir:MakDir del:Del attr:Attr list:List free:Free \
+        build:Build deiniz:DeIniz deldir:DelDir devs:Devs dmode:DMode \
+        dump:Dump echo:Echo ident:Ident iniz:Iniz link:Link mdir:MDir \
+        merge:Merge prompt:Prompt rename:Rename save:Save setime:Setime \
+        tee:Tee touch:Touch tsmon:TSMon verify:Verify \
+        dirsort:DirSort binex:Binex exbin:Exbin disasm:Disasm edit:Edit \
+        more:More dcheck:DCheck backup:Backup pwd:Pwd pxd:Pxd
     do
         src=${item%%:*}
         dst=${item#*:}

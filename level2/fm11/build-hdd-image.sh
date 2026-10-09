@@ -81,6 +81,37 @@ build_cpu() {
     build "$ROOT/level1/cmds/dir.asm"            dir
     build "$ROOT/level1/cmds/free.asm"           free
 
+    # Match the normal command set installed in the floppy images.
+    build "$ROOT/level1/cmds/sleep.asm"          sleep
+    build "$ROOT/level2/cmds/procs.asm"          procs
+    build "$ROOT/level1/cmds/date.asm"           date
+    build "$ROOT/level1/cmds/xmode.asm"          tmode -DTMODE=1
+    build "$ROOT/level1/cmds/copy.asm"           copy
+    build "$ROOT/level1/cmds/dsave.asm"          dsave
+    build "$ROOT/level1/cmds/cmp.asm"            cmp
+    build "$ROOT/level1/cmds/load.asm"           load
+    build "$ROOT/level1/cmds/unlink.asm"         unlink
+    build "$ROOT/level1/cmds/makdir.asm"         makdir
+    build "$ROOT/level1/cmds/del.asm"            del
+    build "$ROOT/level1/cmds/attr.asm"           attr
+    build "$ROOT/level1/cmds/list.asm"           list
+
+    # Additional standard commands used by the Level 1 FM-11 distribution.
+    for cmd in \
+        build deiniz deldir devs dmode dump echo ident iniz link \
+        mdir merge prompt rename save setime tee touch tsmon verify \
+        dirsort binex exbin disasm edit dcheck backup
+    do
+        build "$ROOT/level1/cmds/$cmd.asm" "$cmd"
+    done
+
+    # More uses the FM-11 ANSI/VT100 variant already proven on Level 1.
+    build "$ROOT/level1/fm11/cmds/more.asm"        more
+
+    # pd.asm is the common source for Pwd and Pxd.
+    build "$ROOT/level1/cmds/pd.asm"               pwd -DPWD=1
+    build "$ROOT/level1/cmds/pd.asm"               pxd -DPXD=1
+
     case "$MODELSEL" in
         all)
             for m in m2230b m2231b m2232b m2233b m2234b m2235b m2241b m2242b m2243b; do
@@ -138,7 +169,17 @@ build_model() {
     os9 format -e -l"$RBF_SECTORS" -bs256 -q "$RBF" -n"FM11L2HD"
     os9 copy -o=0 "$OS9BOOT" "$RBF,OS9Boot"
     os9 makdir "$RBF,CMDS"
-    for item in shell:Shell dir:Dir free:Free; do
+    for item in \
+        shell:Shell dir:Dir sleep:Sleep procs:Procs date:Date tmode:TMode \
+        copy:Copy dsave:DSave cmp:Cmp load:Load unlink:Unlink \
+        makdir:MakDir del:Del attr:Attr list:List free:Free \
+        build:Build deiniz:DeIniz deldir:DelDir devs:Devs dmode:DMode \
+        dump:Dump echo:Echo ident:Ident iniz:Iniz link:Link mdir:MDir \
+        merge:Merge prompt:Prompt rename:Rename save:Save setime:Setime \
+        tee:Tee touch:Touch tsmon:TSMon verify:Verify \
+        dirsort:DirSort binex:Binex exbin:Exbin disasm:Disasm edit:Edit \
+        more:More dcheck:DCheck backup:Backup pwd:Pwd pxd:Pxd
+    do
         src=${item%%:*}
         dst=${item#*:}
         os9 copy -o=0 "$OUT/$src" "$RBF,CMDS/$dst"

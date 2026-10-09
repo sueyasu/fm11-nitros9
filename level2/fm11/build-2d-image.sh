@@ -100,6 +100,22 @@ build_one() {
     build "$ROOT/level1/cmds/list.asm"           list
     build "$ROOT/level1/cmds/free.asm"           free
 
+    # Additional standard commands used by the Level 1 FM-11 distribution.
+    for cmd in \
+        build deiniz deldir devs dmode dump echo ident iniz link \
+        mdir merge prompt rename save setime tee touch tsmon verify \
+        dirsort binex exbin disasm edit dcheck backup
+    do
+        build "$ROOT/level1/cmds/$cmd.asm" "$cmd"
+    done
+
+    # More uses the FM-11 ANSI/VT100 variant already proven on Level 1.
+    build "$ROOT/level1/fm11/cmds/more.asm"        more
+
+    # pd.asm is the common source for Pwd and Pxd.
+    build "$ROOT/level1/cmds/pd.asm"               pwd -DPWD=1
+    build "$ROOT/level1/cmds/pd.asm"               pxd -DPXD=1
+
     BOOTLIST="$FM/bootlists/bootlist.2d"
     OS9BOOT="$OUT/OS9Boot-2d"
     : > "$OS9BOOT"
@@ -143,7 +159,12 @@ build_one() {
     os9 copy -o=0 "$OUT/tmode" "$RBF,CMDS/TMode"
     os9 attr "$RBF,CMDS/TMode" -e -pe >/dev/null
 
-    for cmd in copy dsave cmp load unlink makdir del attr list free; do
+    for cmd in \
+        copy dsave cmp load unlink makdir del attr list free \
+        build deiniz deldir devs dmode dump echo ident iniz link \
+        mdir merge prompt rename save setime tee touch tsmon verify \
+        dirsort binex exbin disasm edit more dcheck backup pwd pxd
+    do
         case "$cmd" in
             copy)   diskname=Copy ;;
             dsave)  diskname=DSave ;;
@@ -155,6 +176,36 @@ build_one() {
             attr)   diskname=Attr ;;
             list)   diskname=List ;;
             free)   diskname=Free ;;
+            build)  diskname=Build ;;
+            deiniz) diskname=DeIniz ;;
+            deldir) diskname=DelDir ;;
+            devs)   diskname=Devs ;;
+            dmode)  diskname=DMode ;;
+            dump)   diskname=Dump ;;
+            echo)   diskname=Echo ;;
+            ident)  diskname=Ident ;;
+            iniz)   diskname=Iniz ;;
+            link)   diskname=Link ;;
+            mdir)   diskname=MDir ;;
+            merge)  diskname=Merge ;;
+            prompt) diskname=Prompt ;;
+            rename) diskname=Rename ;;
+            save)   diskname=Save ;;
+            setime) diskname=Setime ;;
+            tee)    diskname=Tee ;;
+            touch)  diskname=Touch ;;
+            tsmon)  diskname=TSMon ;;
+            verify) diskname=Verify ;;
+            dirsort) diskname=DirSort ;;
+            binex)  diskname=Binex ;;
+            exbin)  diskname=Exbin ;;
+            disasm) diskname=Disasm ;;
+            edit)   diskname=Edit ;;
+            more)   diskname=More ;;
+            dcheck) diskname=DCheck ;;
+            backup) diskname=Backup ;;
+            pwd)    diskname=Pwd ;;
+            pxd)    diskname=Pxd ;;
         esac
         os9 copy -o=0 "$OUT/$cmd" "$RBF,CMDS/$diskname"
         os9 attr "$RBF,CMDS/$diskname" -e -pe >/dev/null
