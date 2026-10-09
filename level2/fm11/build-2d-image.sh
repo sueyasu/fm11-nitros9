@@ -116,6 +116,15 @@ build_one() {
     build "$ROOT/level1/fm11/cmds/minted.asm"      minted
     build "$ROOT/level1/fm11/cmds/ded.asm"         ded
 
+    # Level 2-specific, machine-independent diagnostics and utilities.
+    # These use public Level 2 system calls rather than FM-11 hardware directly.
+    build "$ROOT/level2/cmds/dmem.asm"             dmem
+    build "$ROOT/level2/cmds/mdir.asm"             mdir
+    build "$ROOT/level2/cmds/mfree.asm"            mfree
+    build "$ROOT/level2/cmds/mmap.asm"             mmap
+    build "$ROOT/level2/cmds/pmap.asm"             pmap
+    build "$ROOT/level2/cmds/proc.asm"             proc
+
     # pd.asm is the common source for Pwd and Pxd.
     build "$ROOT/level1/cmds/pd.asm"               pwd -DPWD=1
     build "$ROOT/level1/cmds/pd.asm"               pxd -DPXD=1
@@ -167,7 +176,8 @@ build_one() {
         copy dsave cmp load unlink makdir del attr list free \
         build deiniz deldir devs dmode dump echo ident iniz link \
         mdir merge prompt rename save setime tee touch tsmon verify \
-        dirsort binex exbin disasm edit more dcheck backup pwd pxd minted ded
+        dirsort binex exbin disasm edit more dcheck backup pwd pxd minted ded \
+        dmem mfree mmap pmap proc
     do
         case "$cmd" in
             copy)   diskname=Copy ;;
@@ -212,6 +222,11 @@ build_one() {
             pxd)    diskname=Pxd ;;
             minted) diskname=MinTED ;;
             ded)    diskname=dEd ;;
+            dmem)   diskname=DMem ;;
+            mfree)  diskname=MFree ;;
+            mmap)   diskname=MMap ;;
+            pmap)   diskname=PMap ;;
+            proc)   diskname=Proc ;;
         esac
         os9 copy -o=0 "$OUT/$cmd" "$RBF,CMDS/$diskname"
         os9 attr "$RBF,CMDS/$diskname" -e -pe >/dev/null
