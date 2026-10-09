@@ -82,7 +82,7 @@ ClearDP             sta       ,x+
                     lds       #$1FFF
 
                   IFNE    H6309
-                    ldmd      #3
+                    ldmd      #$01
                     inc       <D.MDREG
                   ENDC
 
