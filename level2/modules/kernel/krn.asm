@@ -307,7 +307,12 @@ done@               ldx       #$0000    ; start clearing at this address
                   ELSE
 * REL has cleared page 0 already, so start at address $100.
                   IFNE    H6309   ; begin conditional assembly for H6309
+                  IFNE    fm11
+                    ldd       #$0100
+                    ldw       #$1f00
+                  ELSE
                     ldq       #$01001f00 ; start address to clear & # bytes to clear
+                  ENDC
                     leay      <entry+2,pc ; point to a 0
                     tfm       y,d+      ; transfer memory block using y,d+
                     std       <D.CCStk  ; set pointer to top of global memory to $2000
@@ -715,7 +720,12 @@ FM11KrnSizeDone     stb       <D.MemSz
                     addd      ,s++
                   ELSE
                   IFNE    H6309   ; begin conditional assembly for H6309
+                  IFNE    fm11
+                    ldd       #$0008
+                    ldw       #$0100
+                  ELSE
                     ldq       #$00080100 ; e=Marker, D=Block # to check
+                  ENDC
 KrnBlock            asld                ; get next block #
                     stb       >DAT.Regs+5 ; map block into block 6 of my task
                     ste       >-$6000,x ; save marker to that block
