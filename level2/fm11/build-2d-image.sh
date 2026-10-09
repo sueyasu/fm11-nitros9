@@ -125,6 +125,10 @@ build_one() {
     build "$ROOT/level2/cmds/pmap.asm"             pmap
     build "$ROOT/level2/cmds/proc.asm"             proc
 
+    # FM-11 RBF formatter.  This source already contains the FM-11
+    # reserved-cylinder handling used by the Level 1 distribution.
+    build "$ROOT/level1/fm11/cmds/format.asm"       format
+
     # pd.asm is the common source for Pwd and Pxd.
     build "$ROOT/level1/cmds/pd.asm"               pwd -DPWD=1
     build "$ROOT/level1/cmds/pd.asm"               pxd -DPXD=1
@@ -177,7 +181,7 @@ build_one() {
         build deiniz deldir devs dmode dump echo ident iniz link \
         mdir merge prompt rename save setime tee touch tsmon verify \
         dirsort binex exbin disasm edit more dcheck backup pwd pxd minted ded \
-        dmem mfree mmap pmap proc
+        dmem mfree mmap pmap proc format
     do
         case "$cmd" in
             copy)   diskname=Copy ;;
@@ -227,6 +231,7 @@ build_one() {
             mmap)   diskname=MMap ;;
             pmap)   diskname=PMap ;;
             proc)   diskname=Proc ;;
+            format) diskname=Format ;;
         esac
         os9 copy -o=0 "$OUT/$cmd" "$RBF,CMDS/$diskname"
         os9 attr "$RBF,CMDS/$diskname" -e -pe >/dev/null

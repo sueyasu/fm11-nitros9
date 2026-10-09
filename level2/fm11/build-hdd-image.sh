@@ -121,6 +121,10 @@ build_cpu() {
     build "$ROOT/level2/cmds/pmap.asm"             pmap
     build "$ROOT/level2/cmds/proc.asm"             proc
 
+    # FM-11 RBF formatter.  This source already contains the FM-11
+    # reserved-cylinder handling used by the Level 1 distribution.
+    build "$ROOT/level1/fm11/cmds/format.asm"       format
+
     # pd.asm is the common source for Pwd and Pxd.
     build "$ROOT/level1/cmds/pd.asm"               pwd -DPWD=1
     build "$ROOT/level1/cmds/pd.asm"               pxd -DPXD=1
@@ -193,7 +197,8 @@ build_model() {
         dirsort:DirSort binex:Binex exbin:Exbin disasm:Disasm edit:Edit \
         more:More dcheck:DCheck backup:Backup pwd:Pwd pxd:Pxd \
         minted:MinTED ded:dEd \
-        dmem:DMem mfree:MFree mmap:MMap pmap:PMap proc:Proc
+        dmem:DMem mfree:MFree mmap:MMap pmap:PMap proc:Proc \
+        format:Format
     do
         src=${item%%:*}
         dst=${item#*:}
