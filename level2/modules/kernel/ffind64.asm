@@ -65,12 +65,7 @@ FFind64Return2      rts                 ; return
 * Exit: X=Ptr to newly allocated 256 byte page
 FFind64Target       pshs      u         ; preserve register stack pointer
                   IFNE    H6309   ; begin conditional assembly for H6309
-                  IFNE    fm11
-                    ldd       #$0100
-                    ldw       #$0100
-                  ELSE
                     ldq       #$01000100 ; get block size (1 for SRqMem & 1 for TFM)
-                  ENDC
                   ELSE
                     ldd       #$0100    ; load D from #$0100
                   ENDC
