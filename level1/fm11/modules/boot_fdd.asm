@@ -6,7 +6,7 @@
 * fragmented-boot form: DD.BSZ=0 and DD.BT points at the file
 * descriptor of /OS9Boot.
 *
-* Hardware path is deliberately PIO through the FM-11 2D MiniFDC.  Geometry is 40 cylinders, 2 sides, 16 sectors
+* Hardware path uses DMA0 through the FM-11 2D MiniFDC.  Geometry is 40 cylinders, 2 sides, 16 sectors
 * per side, 256 bytes per sector.  The complete first physical track (32 sectors) is reserved for the ROM
 * IPL and boottrack; RBF LSN0 starts at physical sector 32 (T1/H0/S1).
 ********************************************************************
@@ -52,7 +52,7 @@ FLOPPY              equ       1
 
 * HWInit
 *   Y = Address ($FD18, 2D MiniFDC)
-* Keep the first boot implementation in PIO mode, independent of the RBSuper runtime path.
+* Start with DMA disabled; HWRead programs and enables DMA0 for each sector.
 HWInit              lda       >FM11_DMA0_MODE
                     anda      #^FM11_DMA_ENABLE
                     sta       >FM11_DMA0_MODE
@@ -104,50 +104,64 @@ HWGotSide           stb       >FM11_MFDC_SIDE
                     stb       >FM11_MFDC_SECTOR
                     clr       >FM11_MFDC_DRIVE
 
-* Force PIO in case firmware or an earlier stage left DMA enabled.
-                    lda       >FM11_DMA0_MODE
-                    anda      #^FM11_DMA_ENABLE
-                    sta       >FM11_DMA0_MODE
-
+* Level 1 uses a flat 16-bit address space, so blockloc is also the DMA
+* physical address.  Mask interrupts only while programming DMA/FDC.
+                    pshs      cc
+                    orcc      #IntMasks
+                    ldx       blockloc,u
+                    bsr       SetupDMA0
                     lda       #FM11_MFDC_READSEC
                     sta       >FM11_MFDC_CMD
+                    puls      cc
 
-* Y must remain the hardware-address value between boot_common calls;
-* U must remain the static-storage pointer.  Save both while using them
-* as the byte counter and timeout counter.
-                    ldx       blockloc,u
-                    pshs      y,u
-                    ldy       #256
-HWReadByte          ldu       #0
-HWWaitDRQ           lda       >FM11_MFDC_STATUS
-                    bita      #FM11_MFDC_ERRMASK
-                    bne       HWReadErrorSaved
-                    bita      #FM11_MFDC_DRQ
-                    bne       HWHavByte
-                    leau      -1,u
-                    cmpu      #0
-                    bne       HWWaitDRQ
-                    bra       HWReadErrorSaved
-HWHavByte           lda       >FM11_MFDC_DATA
-                    sta       ,x+
-                    leay      -1,y
-                    bne       HWReadByte
-
-* Final status read completes/acknowledges the PIO operation in
-* fm11-headless.
+                    bsr       DMA0Wait
+                    bcs       HWReadError
                     lda       >FM11_MFDC_STATUS
                     bita      #FM11_MFDC_ERRMASK
-                    bne       HWReadErrorSaved
+                    bne       HWReadError
 
-                    puls      y,u
                     ldx       blockloc,u
                     clrb
                     andcc     #^Carry
                     rts
 
-HWReadErrorSaved    puls      y,u
-                    orcc      #Carry
+HWReadError         orcc      #Carry
                     ldb       #E$Read
+                    rts
+
+********************************************************************
+* SetupDMA0 - program DMA0 for one 256-byte Level 1 transfer.
+*
+* Entry:
+*   X = destination address
+*
+* Level 1 logical addresses are physical addresses, so no MMR
+* translation is required.  The DMA controller has a 20-bit address;
+* the upper nibble is zero for the 64 KiB Level 1 address space.
+********************************************************************
+SetupDMA0           tfr       x,d
+                    stb       >FM11_DMA0_ADDR_L
+                    sta       >FM11_DMA0_ADDR_M
+                    clr       >FM11_DMA0_ADDR_H
+
+                    lda       #1
+                    sta       >FM11_DMA0_COUNT_H
+                    clr       >FM11_DMA0_COUNT_L
+                    lda       #FM11_DMA_ENABLE
+                    sta       >FM11_DMA0_MODE
+                    rts
+
+DMA0Wait            ldx       #$FFFF
+DMA0WaitLoop        lda       >FM11_DMA0_MODE
+                    bita      #FM11_DMA_ERROR
+                    bne       DMA0WaitError
+                    bita      #FM11_DMA_DONE
+                    bne       DMA0WaitDone
+                    leax      -1,x
+                    bne       DMA0WaitLoop
+DMA0WaitError       orcc      #Carry
+                    rts
+DMA0WaitDone        andcc     #^Carry
                     rts
 
 HWSectorError       orcc      #Carry
