@@ -101,24 +101,26 @@ FMoveBytes2         cmpw      #$0100    ; less than 256 bytes?
                     bls       FMoveCount ; yes, skip ahead
                     ldw       #$0100    ; force to 256 bytes
 FMoveCount          stw       12,s      ; save count
-                    orcc      #IntMasks ; shut off interrupts
                   IFNE    fm11
                     ldy       10,s      ; source DAT entry pointer
                     lda       1,y
-                    FM11_MAP5_A
                     ldy       6,s       ; destination DAT entry pointer
-                    lda       1,y
-                    FM11_MAP6_A
+                    ldb       1,y
+                    pshs      cc        ; preserve caller IRQ/FIRQ state
+                    orcc      #IntMasks ; shut off interrupts
+                    FM11_MAP56_AB
                   ELSE
+                    orcc      #IntMasks ; shut off interrupts
                     std       >DAT.Regs+5 ; map in the blocks
                   ENDC
                     tfm       x+,u+     ; copy up to 256 bytes (max 774 cycles)
                   IFNE    fm11
                     FM11_RESTORE56_Y
+                    puls      cc        ; restore caller IRQ/FIRQ state
                   ELSE
                     sty       >DAT.Regs+5 ; restore system blocks 5&6 to normal
-                  ENDC
                     andcc     #^IntMasks ; clear condition-code bits using #^IntMasks
+                  ENDC
                     ldd       14,s      ; get full count
                     subd      12,s      ; done?
                     beq       FMovePurge ; yes, return
