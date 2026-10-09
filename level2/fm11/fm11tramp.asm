@@ -194,21 +194,18 @@ FM11TrStageDAT      lda       1,u
                     decb
                     bne       FM11TrStageDAT
 
-* Program the destination bank while translation is disabled.  $FD90 is
-* still usable as the MMR-bank selector with the MMU off, so the CPU never
-* executes through the target bank while its sixteen registers are only
-* partially updated.
+* Program the destination bank with address translation left enabled.  The
+* fixed-RAM trampoline does not execute from, or access data through, the
+* destination task's translated address space while its sixteen MMRs are
+* being updated, so temporarily selecting a partially programmed task is
+* safe.
 *
 * Y preserves the entry D value while the DAT image is expanded.  Recover
-* destination task B from Y here, then use FM11_L2_STATE+4 only for the exact
-* pre-call MMR control value.  This keeps the fixed entry layout unchanged
-* and fits in the existing $FF60-$FF9F SetTask slot.
+* destination task B from Y here, select that task, write all sixteen MMRs,
+* then select task 0 again before restoring registers from the caller's
+* stack.
                     tfr       y,d
                     ldx       #FM11_MMR_TASK
-                    lda       3,x
-                    sta       >FM11_L2_STATE+4
-                    anda      #$7F
-                    sta       3,x
                     stb       ,x
 
 * $FD80 is exactly sixteen bytes below $FD90.  After sixteen post-increment
@@ -223,8 +220,6 @@ FM11TrWriteDAT      lda       ,u+
 
                     clra
                     sta       ,x
-                    lda       >FM11_L2_STATE+4
-                    sta       3,x
                     puls      cc,d,x,y,u,pc
 
                     fill      $00,(FM11_L2_FLIP0-FM11_L2_TRAMP)-(*-FM11TrImageStart)
