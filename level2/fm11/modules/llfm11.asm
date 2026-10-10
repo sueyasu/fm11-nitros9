@@ -32,6 +32,13 @@ HD2TotalSectors     equ       77*HD2SectorsPerCyl
 PIOTimeout          equ       0
 FM11UseDMA0         equ       1
 
+* SS.WTrk must feed one complete revolution to the FDC without a DMA gap.
+* Allocate two contiguous 8 KiB Level 2 physical blocks as a temporary
+* 16 KiB bounce area.  2D consumes $1900 bytes; 2HD consumes $2A94 bytes.
+WTrkBlocks          equ       2
+WTrk2DBytes         equ       $1900
+WTrk2HDBytes        equ       $2A94
+
 rev                 set       $00
 edition             set       1
 tylg                set       Sbrtn+Objct
@@ -43,6 +50,9 @@ atrv                set       ReEnt+rev
 V.LocalSect         rmb       3
 V.LocalCnt          rmb       1
 V.LocalBuf          rmb       2
+V.WTrkBlk           rmb       2       ; F$AllRAM physical 8 KiB block
+V.WTrkMap           rmb       2       ; temporary process logical mapping
+V.WTrkLen           rmb       2       ; bytes copied to the bounce area
 
 name                fcs       /llfm11/
                     fcb       edition
@@ -514,7 +524,7 @@ WriteExit           rts
 ll_getstat          ldx       PD.RGS,y
                     lda       R$B,x
                     cmpa      #SS.DSize
-                    bne       UnknownSvc
+                    lbne      UnknownSvc
                     lda       #1
                     sta       R$A,x
                     clr       R$B,x
@@ -540,9 +550,12 @@ ll_setstat          ldx       PD.RGS,y
                     cmpa      #SS.SQD
                     beq       StatOK
                     cmpa      #SS.Reset
-                    bne       UnknownSvc
+                    beq       ll_reset
+                    cmpa      #SS.WTrk
+                    lbeq      ll_writetrack
+                    lbra      UnknownSvc
 
-                    lda       PD.DRV,y
+ll_reset            lda       PD.DRV,y
                     cmpa      #2
                     bhs       Reset2HD
                     sta       >FM11_MFDC_DRIVE
@@ -570,6 +583,212 @@ StatOK              clrb
 
 ResetError          orcc      #Carry
                     ldb       #E$Write
+                    rts
+
+********************************************************************
+* SS.WTrk - write one complete format track using a physically contiguous
+* 16 KiB bounce area.
+*
+* FORMAT register convention:
+*   R$X = address of Write Track image in the caller
+*   R$U = physical track number
+*   R$Y low byte bit 0 = side
+*
+* The caller's Level 2 image may span non-contiguous physical blocks, so it
+* cannot be used directly for a single Write Track DMA.  F$AllRAM #2 supplies
+* two contiguous physical 8 KiB blocks.  F$MapBlk makes them temporarily
+* visible in the FORMAT process, F$Move copies the track image, and F$ClrBlk
+* removes that temporary mapping before DMA starts.  The DMA address is then
+* generated directly from the F$AllRAM physical block number.
+********************************************************************
+ll_writetrack       lda       PD.DRV,y
+                    cmpa      #2
+                    blo       LWTSize2D
+                    cmpa      #4
+                    lbhs      BadUnit
+                    ldd       #WTrk2HDBytes
+                    bra       LWTSizeReady
+LWTSize2D           ldd       #WTrk2DBytes
+LWTSizeReady        std       V.WTrkLen,u
+
+* Allocate exactly two consecutive Level 2 RAM blocks.  If physical memory is
+* fragmented and F$AllRAM cannot find them, return E$NoRAM unchanged to FORMAT.
+                    ldb       #WTrkBlocks
+                    os9       F$AllRAM
+                    lbcs      LWTAllocFail
+                    std       V.WTrkBlk,u
+
+* Temporarily map the two physical blocks into two adjacent logical blocks of
+* the FORMAT process.  F$MapBlk returns the first logical address in U.
+                    tfr       d,x
+                    ldb       #WTrkBlocks
+                    pshs      y,u
+                    os9       F$MapBlk
+                    lbcs      LWTMapFailStack
+                    tfr       u,d
+                    puls      y,u
+                    std       V.WTrkMap,u
+
+* Copy the caller's track image to the bounce mapping.  Source and destination
+* are both in the current process task; F$Move handles arbitrary DAT layout.
+                    pshs      y,u
+                    ldx       PD.RGS,y
+                    ldx       R$X,x
+                    pshs      x
+                    ldx       <D.Proc
+                    lda       P$Task,x
+                    tfr       a,b
+                    puls      x
+                    ldy       V.WTrkLen,u
+                    ldu       V.WTrkMap,u
+                    os9       F$Move
+                    puls      y,u
+                    lbcs      LWTMoveFail
+
+* The copy is complete, so remove the temporary logical mapping.  Keep the
+* physical blocks allocated until DMA has finished.
+                    pshs      y,u
+                    ldb       #WTrkBlocks
+                    ldu       V.WTrkMap,u
+                    os9       F$ClrBlk
+                    puls      y,u
+                    lbcs      LWTUnmapFail
+
+                    lda       PD.DRV,y
+                    cmpa      #2
+                    bhs       LWT2HD
+
+* 2D MiniFDC / DMA0.
+                    ldx       PD.RGS,y
+                    ldb       R$U+1,x
+                    stb       >FM11_MFDC_TRACK
+                    lda       R$Y+1,x
+                    anda      #$01
+                    sta       >FM11_MFDC_SIDE
+                    lda       PD.DRV,y
+                    sta       >FM11_MFDC_DRIVE
+
+                    ldd       V.WTrkBlk,u
+                    lslb                ; first 4 KiB page = 2 * 8 KiB block
+                    tfr       b,a
+                    lsra
+                    lsra
+                    lsra
+                    lsra
+                    sta       >FM11_DMA0_ADDR_H
+                    andb      #$0F
+                    lslb
+                    lslb
+                    lslb
+                    lslb
+                    stb       >FM11_DMA0_ADDR_M
+                    clr       >FM11_DMA0_ADDR_L
+                    lda       #$19
+                    sta       >FM11_DMA0_COUNT_H
+                    clr       >FM11_DMA0_COUNT_L
+                    lda       #FM11_DMA_ENABLE+FM11_DMA_DIR_WRITE
+                    sta       >FM11_DMA0_MODE
+                    lda       #FM11_MFDC_WRITETRK
+                    sta       >FM11_MFDC_CMD
+                    lbsr      DMA0Wait
+                    bcs       LWTIOError
+                    lda       >FM11_MFDC_STATUS
+                    bita      #FM11_MFDC_ERRMASK
+                    bne       LWTIOError
+                    bra       LWTSuccess
+
+* 2HD standard FDC / DMA1.
+LWT2HD              cmpa      #4
+                    lbhs      BadUnit
+                    ldx       PD.RGS,y
+                    ldb       R$U+1,x
+                    stb       >FM11_FDC_TRACK
+                    lda       R$Y+1,x
+                    anda      #$01
+                    sta       >FM11_FDC_SIDE
+                    lda       PD.DRV,y
+                    suba      #2
+                    sta       >FM11_FDC_DRIVE
+
+                    ldd       V.WTrkBlk,u
+                    lslb                ; first 4 KiB page = 2 * 8 KiB block
+                    tfr       b,a
+                    lsra
+                    lsra
+                    lsra
+                    lsra
+                    sta       >FM11_DMA1_ADDR_H
+                    andb      #$0F
+                    lslb
+                    lslb
+                    lslb
+                    lslb
+                    stb       >FM11_DMA1_ADDR_M
+                    clr       >FM11_DMA1_ADDR_L
+                    lda       #$2A
+                    sta       >FM11_DMA1_COUNT_H
+                    lda       #$94
+                    sta       >FM11_DMA1_COUNT_L
+                    lda       #FM11_DMA_ENABLE+FM11_DMA_DIR_WRITE
+                    sta       >FM11_DMA1_MODE
+                    lda       #FM11_FDC_WRITETRK
+                    sta       >FM11_FDC_CMD
+                    lbsr      DMA1Wait
+                    bcs       LWTIOError
+                    lda       >FM11_FDC_STATUS
+                    bita      #FM11_FDC_ERRMASK
+                    bne       LWTIOError
+
+LWTSuccess          lbsr      LWTFreeRAM
+                    lbra      StatOK
+
+LWTIOError          ldb       #E$Write
+                    pshs      b
+                    lbsr      LWTFreeRAM
+                    puls      b
+                    orcc      #Carry
+                    rts
+
+* F$Move failed while the bounce blocks are still mapped.
+LWTMoveFail         pshs      b
+                    lbsr      LWTReleaseMapped
+                    puls      b
+                    orcc      #Carry
+                    rts
+
+* F$MapBlk failed.  Restore the driver's U/Y first, then release F$AllRAM.
+LWTMapFailStack     puls      y,u
+                    pshs      b
+                    lbsr      LWTFreeRAM
+                    puls      b
+                    orcc      #Carry
+                    rts
+
+* F$ClrBlk unexpectedly failed.  Do not F$DelRAM a block that might still be
+* present in the process DAT image.  Return the kernel error; the two blocks
+* intentionally remain allocated rather than creating a dangling mapping.
+LWTUnmapFail        orcc      #Carry
+                    rts
+
+LWTAllocFail        orcc      #Carry
+                    rts
+
+* Remove a successful temporary process mapping, then release the physical RAM.
+* This is used only on a copy failure; normal flow has already called F$ClrBlk.
+LWTReleaseMapped    pshs      y,u
+                    ldb       #WTrkBlocks
+                    ldu       V.WTrkMap,u
+                    os9       F$ClrBlk
+                    puls      y,u
+                    bcs       LWTReleaseDone
+                    lbsr      LWTFreeRAM
+LWTReleaseDone      rts
+
+LWTFreeRAM          pshs      y,u
+                    ldx       V.WTrkBlk,u
+                    ldb       #WTrkBlocks
+                    os9       F$DelRAM
+                    puls      y,u
                     rts
 
 UnknownSvc          orcc      #Carry
