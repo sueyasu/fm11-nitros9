@@ -151,7 +151,7 @@ build_model() {
     CYL=$1
     HEADS=$2
     TOTAL=$((CYL * HEADS * 32))
-    RESERVE=23
+    RESERVE=32
     RBF_SECTORS=$((TOTAL - RESERVE))
 
     OS9BOOT="$OUT/OS9Boot-hd-$MODEL"
@@ -209,12 +209,21 @@ build_model() {
     python3 "$ROOT/patch-boot-descriptor.py" "$RBF"
 
     IPLTMP=$(mktemp "${TMPDIR:-/tmp}/fm11-l2-hdipl.XXXXXX")
-    trap 'rm -f "$IPLTMP"' EXIT HUP INT TERM
+    BOOTTMP=$(mktemp "${TMPDIR:-/tmp}/fm11-l2-hdboot.XXXXXX")
+    trap 'rm -f "$IPLTMP" "$BOOTTMP"' EXIT HUP INT TERM
     cp "$OUT/ipl-hd.bin" "$IPLTMP"
     truncate -s 512 "$IPLTMP"
 
-    cat "$IPLTMP" "$OUT/kerneltrack-hd" "$RBF" > "$HDD"
-    rm -f "$IPLTMP"
+    cat "$IPLTMP" "$OUT/kerneltrack-hd" > "$BOOTTMP"
+    RESERVED_BYTES=$((RESERVE * 256))
+    BOOTSIZE=$(wc -c < "$BOOTTMP" | tr -d ' ')
+    if [ "$BOOTSIZE" -gt "$RESERVED_BYTES" ]; then
+        echo "HDD boot area too large for $MODEL: $BOOTSIZE (max $RESERVED_BYTES)" >&2
+        exit 1
+    fi
+    truncate -s "$RESERVED_BYTES" "$BOOTTMP"
+    cat "$BOOTTMP" "$RBF" > "$HDD"
+    rm -f "$IPLTMP" "$BOOTTMP"
     trap - EXIT HUP INT TERM
 
     EXPECT=$((TOTAL * 256))
@@ -226,7 +235,7 @@ build_model() {
 
     echo "FM-11 Level 2 $CPU $MODEL HDD image:"
     echo "  geometry: $CYL cylinders x $HEADS heads x 32 sectors"
-    echo "  reserved: sectors 0-22 (IPL + 21-sector kernel track)"
+    echo "  reserved: sectors 0-31 (IPL + kernel track + padding)"
     echo "  RBF:      $RBF ($RBF_SECTORS sectors)"
     echo "  OS9Boot:  $OS9SIZE bytes"
     echo "  HDD:      $HDD ($ACTUAL bytes)"
