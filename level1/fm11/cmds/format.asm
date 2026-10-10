@@ -417,24 +417,16 @@ err@                pshs      b
 ********************************************************************
 * FM11HDAdjust
 *
-* FM-11 MDC hard disks use PD.DRV 4..7 and TYP.HARD.  The emulator/raw
-* media already provide addressable 256-byte sectors, so FORMAT must not
-* issue the floppy-style SS.WTrk physical-format operation.  Mark these
-* devices for logical RBF initialization only.  Physical sectors 0-18 are reserved for HDD IPL/Bootp1.  Geometry remains entirely
-* descriptor/SS.DSize driven, so all supported M223x/M224x profiles share
-* the same FORMAT code.
+* FM-11 hard disks are raw sector devices and do not support the floppy-style
+* SS.WTrk physical-format operation.  FORMAT is an FM-11-specific command, so
+* TYP.HARD is sufficient to select logical RBF initialization only; do not
+* dereference the Level 2 device-table descriptor pointer here.
+* Physical sectors 0-18 are reserved for HDD IPL/Bootp1.
 ********************************************************************
 FM11HDAdjust        clr       <fm11hdd
                     lda       <dtype
                     bita      #TYP.HARD
                     beq       FMH_Done
-                    ldx       <dtentry
-                    ldx       V$DESC,x
-                    lda       IT.DRV,x
-                    cmpa      #4
-                    blo       FMH_Done
-                    cmpa      #8
-                    bhs       FMH_Done
                     lda       #1
                     sta       <fm11hdd
 FMH_Done            rts
