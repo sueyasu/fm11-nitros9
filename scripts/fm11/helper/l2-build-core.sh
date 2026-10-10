@@ -169,6 +169,19 @@ build_one() {
         exit 1
     fi
 
+    # Runtime boot assets used by the FM-11 Cobbler command.  Keep the
+    # filenames identical to the established Level 1 /DD/SYS convention.
+    cp "$OUT/ipl-2d.bin" "$OUT/IPL.2D"
+    truncate -s 1024 "$OUT/IPL.2D"
+    cp "$OUT/ipl-2hd.bin" "$OUT/IPL.2HD"
+    truncate -s 1024 "$OUT/IPL.2HD"
+    cp "$OUT/ipl-hd.bin" "$OUT/IPL.HD"
+    truncate -s 512 "$OUT/IPL.HD"
+
+    cp "$OUT/kerneltrack-2d" "$OUT/Bootp1.2D"
+    cp "$OUT/kerneltrack-2hd" "$OUT/Bootp1.2HD"
+    cp "$OUT/kerneltrack-hd" "$OUT/Bootp1.HD"
+
     echo "FM-11 Level 2 $CPU 8K-pair core:"
     echo "  IPL 2D:       $IPLSIZE bytes"
     echo "  IPL 2HD:      $IPL2HDSIZE bytes"

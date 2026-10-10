@@ -23,6 +23,10 @@ MDCError            equ       $80
 MDCBinaryMask       equ       $70
 MDCDMA2Select       equ       $20
 
+AssetBlocks         equ       1
+HDIPLAssetBytes     equ       512
+HDBootAssetBytes    equ       21*256
+
 rev                 set       $00
 edition             set       1
 tylg                set       Sbrtn+Objct
@@ -34,6 +38,9 @@ atrv                set       ReEnt+rev
 V.LocalSect         rmb       3
 V.LocalCnt          rmb       1
 V.LocalBuf          rmb       2
+V.AssetBlk          rmb       2
+V.AssetMap          rmb       2
+V.AssetLen          rmb       2
 
 name                fcs       /llfm11hd/
                     fcb       edition
@@ -296,12 +303,137 @@ GS_Unknown          orcc      #Carry
                     ldb       #E$UnkSvc
                     rts
 
-HDWriteAsset        stx       V.LocalBuf,u
+********************************************************************
+* HDD Cobbler asset bounce buffer.
+********************************************************************
+HDAssetPrepare      std       V.AssetLen,u
+                    ldb       #AssetBlocks
+                    os9       F$AllRAM
+                    bcs       HDAssetAllocFail
+                    std       V.AssetBlk,u
+
+                    tfr       d,x
+                    ldb       #AssetBlocks
+                    pshs      y,u
+                    os9       F$MapBlk
+                    bcs       HDAssetMapFailStack
+                    tfr       u,d
+                    puls      y,u
+                    std       V.AssetMap,u
+
+                    pshs      y,u
+                    ldx       PD.RGS,y
+                    ldx       R$X,x
+                    pshs      x
+                    ldx       <D.Proc
+                    lda       P$Task,x
+                    tfr       a,b
+                    puls      x
+                    ldy       V.AssetLen,u
+                    ldu       V.AssetMap,u
+                    os9       F$Move
+                    puls      y,u
+                    bcs       HDAssetMoveFail
+
+                    pshs      y,u
+                    ldb       #AssetBlocks
+                    ldu       V.AssetMap,u
+                    os9       F$ClrBlk
+                    puls      y,u
+                    bcs       HDAssetUnmapFail
+
+                    clra
+                    clrb
+                    std       V.LocalBuf,u
+                    andcc     #^Carry
+                    rts
+
+HDAssetMapFailStack puls      y,u
+                    pshs      b
+                    lbsr      HDAssetFreeRAM
+                    puls      b
+                    orcc      #Carry
+                    rts
+
+HDAssetMoveFail     pshs      b
+                    lbsr      HDAssetReleaseMapped
+                    puls      b
+                    orcc      #Carry
+                    rts
+
+HDAssetUnmapFail    orcc      #Carry
+                    rts
+HDAssetAllocFail    orcc      #Carry
+                    rts
+
+HDAssetReleaseMapped
+                    pshs      y,u
+                    ldb       #AssetBlocks
+                    ldu       V.AssetMap,u
+                    os9       F$ClrBlk
+                    puls      y,u
+                    bcs       HDAssetReleaseDone
+                    lbsr      HDAssetFreeRAM
+HDAssetReleaseDone  rts
+
+HDAssetFreeRAM      pshs      y,u
+                    ldx       V.AssetBlk,u
+                    ldb       #AssetBlocks
+                    os9       F$DelRAM
+                    puls      y,u
+                    rts
+
+SetupHDAssetDMA2    lda       V.AssetBlk+1,u
+                    pshs      a
+                    lsra
+                    lsra
+                    lsra
+                    sta       >FM11_DMA2_ADDR_H
+                    puls      a
+                    anda      #$07
+                    lsla
+                    lsla
+                    lsla
+                    lsla
+                    lsla
+                    adda      V.LocalBuf,u
+                    sta       >FM11_DMA2_ADDR_M
+                    lda       V.LocalBuf+1,u
+                    sta       >FM11_DMA2_ADDR_L
+                    rts
+
+WriteHDAssetSector  lbsr      SetBinary
+                    bcs       WHDASError
+                    lbsr      SetupHDAssetDMA2
+                    lda       #1
+                    sta       >FM11_DMA2_COUNT_H
+                    clr       >FM11_DMA2_COUNT_L
+                    lda       #FM11_DMA_ENABLE+FM11_DMA_DIR_WRITE
+                    sta       >FM11_DMA2_MODE
+                    lda       #FM11_MDC_WRITE
+                    sta       >FM11_MDC_CMD
+                    lbsr      SendRWParams
+                    bcs       WHDASError
+                    lbsr      WaitResult
+                    bcs       WHDASError
+                    lda       >FM11_DMA2_MODE
+                    bita      #FM11_DMA_ERROR
+                    bne       WHDASError
+                    bita      #FM11_DMA_DONE
+                    beq       WHDASError
+                    clrb
+                    andcc     #^Carry
+                    rts
+WHDASError          orcc      #Carry
+                    ldb       #E$Write
+                    rts
+
+HDWriteAsset
                     sta       V.LocalSect+2,u
                     clr       V.LocalSect,u
                     clr       V.LocalSect+1,u
                     stb       V.LocalCnt,u
-HDWA_Loop           lbsr      WriteSector
+HDWA_Loop           lbsr      WriteHDAssetSector
                     bcs       HDWA_Exit
                     lbsr      Advance
                     dec       V.LocalCnt,u
@@ -323,14 +455,33 @@ ll_setstat          ldx       PD.RGS,y
                     orcc      #Carry
                     ldb       #E$UnkSvc
                     rts
-SS_HDIPL            ldx       R$X,x
+
+SS_HDIPL            ldd       #HDIPLAssetBytes
+                    lbsr      HDAssetPrepare
+                    bcs       SS_HDExit
                     clra
                     ldb       #2
-                    bra       HDWriteAsset
-SS_HDBoot           ldx       R$X,x
+                    lbsr      HDWriteAsset
+                    bcs       SS_HDIOExit
+                    lbsr      HDAssetFreeRAM
+                    bra       SS_OK
+
+SS_HDBoot           ldd       #HDBootAssetBytes
+                    lbsr      HDAssetPrepare
+                    bcs       SS_HDExit
                     lda       #2
                     ldb       #21
-                    bra       HDWriteAsset
+                    lbsr      HDWriteAsset
+                    bcs       SS_HDIOExit
+                    lbsr      HDAssetFreeRAM
+                    bra       SS_OK
+
+SS_HDIOExit         pshs      b
+                    lbsr      HDAssetFreeRAM
+                    puls      b
+                    orcc      #Carry
+SS_HDExit           rts
+
 SS_OK               clrb
                     andcc     #^Carry
                     rts

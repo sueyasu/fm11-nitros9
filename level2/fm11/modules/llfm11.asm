@@ -39,6 +39,10 @@ WTrkBlocks          equ       2
 WTrk2DBytes         equ       $1900
 WTrk2HDBytes        equ       $2A94
 
+AssetBlocks         equ       1
+IPLAssetBytes       equ       1024
+BootAssetBytes      equ       21*256
+
 rev                 set       $00
 edition             set       1
 tylg                set       Sbrtn+Objct
@@ -53,6 +57,9 @@ V.LocalBuf          rmb       2
 V.WTrkBlk           rmb       2       ; F$AllRAM physical 8 KiB block
 V.WTrkMap           rmb       2       ; temporary process logical mapping
 V.WTrkLen           rmb       2       ; bytes copied to the bounce area
+V.AssetBlk          rmb       2       ; Cobbler asset physical 8 KiB block
+V.AssetMap          rmb       2       ; temporary process logical mapping
+V.AssetLen          rmb       2       ; bytes copied to the asset bounce block
 
 name                fcs       /llfm11/
                     fcb       edition
@@ -553,6 +560,10 @@ ll_setstat          ldx       PD.RGS,y
                     beq       ll_reset
                     cmpa      #SS.WTrk
                     lbeq      ll_writetrack
+                    cmpa      #SS.FM11Boot
+                    lbeq      ll_boottrack
+                    cmpa      #SS.FM11IPL
+                    lbeq      ll_ipl
                     lbra      UnknownSvc
 
 ll_reset            lda       PD.DRV,y
@@ -582,6 +593,329 @@ StatOK              clrb
                     rts
 
 ResetError          orcc      #Carry
+                    ldb       #E$Write
+                    rts
+
+********************************************************************
+* SS.FM11IPL - write the reserved ROM IPL sectors on cylinder 0.
+*
+* R$X belongs to the Cobbler process.  Do not DMA from that logical address
+* directly: the low-level driver may execute while another hardware MMR map is
+* active.  Copy the complete IPL image into one F$AllRAM 8 KiB block, remove
+* the temporary process mapping, then DMA from the physical block directly.
+********************************************************************
+ll_ipl              ldd       #IPLAssetBytes
+                    lbsr      AssetPrepare
+                    bcs       LIPLExit
+                    lda       #4
+                    sta       V.LocalCnt,u
+                    lda       PD.DRV,y
+                    cmpa      #2
+                    bhs       LIPL2HD
+
+LIPL2D              sta       >FM11_MFDC_DRIVE
+                    clr       >FM11_MFDC_TRACK
+                    clr       >FM11_MFDC_SIDE
+                    lda       #1
+                    sta       >FM11_MFDC_SECTOR
+LIPL2DLoop          lbsr      WriteAsset2D256
+                    bcs       LIPLIOExit
+                    inc       V.LocalBuf,u
+                    inc       >FM11_MFDC_SECTOR
+                    dec       V.LocalCnt,u
+                    bne       LIPL2DLoop
+                    lbsr      AssetFreeRAM
+                    lbra      StatOK
+
+LIPL2HD             cmpa      #4
+                    bhs       LIPLBadUnit
+                    suba      #2
+                    sta       >FM11_FDC_DRIVE
+                    clr       >FM11_FDC_TRACK
+                    clr       >FM11_FDC_SIDE
+                    lda       #1
+                    sta       >FM11_FDC_SECTOR
+LIPL2HDLoop         lbsr      WriteAsset2HD128
+                    bcs       LIPLIOExit
+                    ldd       V.LocalBuf,u
+                    addd      #$0080
+                    std       V.LocalBuf,u
+                    inc       >FM11_FDC_SECTOR
+                    dec       V.LocalCnt,u
+                    bne       LIPL2HDLoop
+                    lbsr      AssetFreeRAM
+                    lbra      StatOK
+
+LIPLBadUnit         ldb       #E$Unit
+                    bra       LIPLIOExit
+LIPLIOExit          pshs      b
+                    lbsr      AssetFreeRAM
+                    puls      b
+                    orcc      #Carry
+LIPLExit            rts
+
+********************************************************************
+* SS.FM11Boot - write the 21-sector Level 2 REL/Boot/Krn kernel track.
+*
+* 2D:
+*   T0/H0/S5-S16 (12 sectors), then T0/H1/S1-S9 (9 sectors)
+* 2HD:
+*   T0/H1/S1-S21
+********************************************************************
+ll_boottrack        ldd       #BootAssetBytes
+                    lbsr      AssetPrepare
+                    bcs       LBTExit
+                    lda       #21
+                    sta       V.LocalCnt,u
+                    lda       PD.DRV,y
+                    cmpa      #2
+                    bhs       LBT2HD
+
+LBT2D               sta       >FM11_MFDC_DRIVE
+                    clr       >FM11_MFDC_TRACK
+                    clr       >FM11_MFDC_SIDE
+                    lda       #5
+                    sta       >FM11_MFDC_SECTOR
+LBT2DLoop           lbsr      WriteAsset2D256
+                    bcs       LBTIOExit
+                    inc       V.LocalBuf,u
+                    inc       >FM11_MFDC_SECTOR
+                    lda       >FM11_MFDC_SECTOR
+                    cmpa      #17
+                    blo       LBT2DNext
+                    lda       #1
+                    sta       >FM11_MFDC_SECTOR
+                    lda       >FM11_MFDC_SIDE
+                    eora      #1
+                    sta       >FM11_MFDC_SIDE
+LBT2DNext           dec       V.LocalCnt,u
+                    bne       LBT2DLoop
+                    lbsr      AssetFreeRAM
+                    lbra      StatOK
+
+LBT2HD              cmpa      #4
+                    bhs       LBTBadUnit
+                    suba      #2
+                    sta       >FM11_FDC_DRIVE
+                    clr       >FM11_FDC_TRACK
+                    lda       #1
+                    sta       >FM11_FDC_SIDE
+                    lda       #1
+                    sta       >FM11_FDC_SECTOR
+LBT2HDLoop          lbsr      WriteAsset2HD256
+                    bcs       LBTIOExit
+                    inc       V.LocalBuf,u
+                    inc       >FM11_FDC_SECTOR
+                    dec       V.LocalCnt,u
+                    bne       LBT2HDLoop
+                    lbsr      AssetFreeRAM
+                    lbra      StatOK
+
+LBTBadUnit          ldb       #E$Unit
+                    bra       LBTIOExit
+LBTIOExit           pshs      b
+                    lbsr      AssetFreeRAM
+                    puls      b
+                    orcc      #Carry
+LBTExit             rts
+
+********************************************************************
+* AssetPrepare
+*
+* Entry: D = byte count to copy from caller R$X.
+* Exit:  V.AssetBlk = one physical 8 KiB block containing the asset,
+*        V.LocalBuf = zero byte offset into that block.
+*
+* The temporary logical mapping is removed before DMA starts.  All following
+* DMA address calculations therefore use V.AssetBlk directly and are
+* independent of the currently selected FM-11 hardware task map.
+********************************************************************
+AssetPrepare        std       V.AssetLen,u
+                    ldb       #AssetBlocks
+                    os9       F$AllRAM
+                    bcs       AssetAllocFail
+                    std       V.AssetBlk,u
+
+                    tfr       d,x
+                    ldb       #AssetBlocks
+                    pshs      y,u
+                    os9       F$MapBlk
+                    bcs       AssetMapFailStack
+                    tfr       u,d
+                    puls      y,u
+                    std       V.AssetMap,u
+
+                    pshs      y,u
+                    ldx       PD.RGS,y
+                    ldx       R$X,x
+                    pshs      x
+                    ldx       <D.Proc
+                    lda       P$Task,x
+                    tfr       a,b
+                    puls      x
+                    ldy       V.AssetLen,u
+                    ldu       V.AssetMap,u
+                    os9       F$Move
+                    puls      y,u
+                    bcs       AssetMoveFail
+
+                    pshs      y,u
+                    ldb       #AssetBlocks
+                    ldu       V.AssetMap,u
+                    os9       F$ClrBlk
+                    puls      y,u
+                    bcs       AssetUnmapFail
+
+                    clra
+                    clrb
+                    std       V.LocalBuf,u
+                    andcc     #^Carry
+                    rts
+
+AssetMapFailStack   puls      y,u
+                    pshs      b
+                    lbsr      AssetFreeRAM
+                    puls      b
+                    orcc      #Carry
+                    rts
+
+AssetMoveFail       pshs      b
+                    lbsr      AssetReleaseMapped
+                    puls      b
+                    orcc      #Carry
+                    rts
+
+* As with SS.WTrk, do not free RAM if F$ClrBlk failed: the block may still be
+* present in the process DAT image.
+AssetUnmapFail      orcc      #Carry
+                    rts
+AssetAllocFail      orcc      #Carry
+                    rts
+
+AssetReleaseMapped  pshs      y,u
+                    ldb       #AssetBlocks
+                    ldu       V.AssetMap,u
+                    os9       F$ClrBlk
+                    puls      y,u
+                    bcs       AssetReleaseDone
+                    lbsr      AssetFreeRAM
+AssetReleaseDone    rts
+
+AssetFreeRAM        pshs      y,u
+                    ldx       V.AssetBlk,u
+                    ldb       #AssetBlocks
+                    os9       F$DelRAM
+                    puls      y,u
+                    rts
+
+********************************************************************
+* Physical DMA address for the one-block asset bounce buffer.
+*
+* One Level 2 physical block is 8 KiB.  With block number B:
+*   address[19:16] = B >> 3
+*   address[15:8]  = ((B & 7) << 5) + offset[12:8]
+*   address[7:0]   = offset[7:0]
+* V.LocalBuf is used as a byte offset within the block.
+********************************************************************
+SetupAssetDMA0      lda       V.AssetBlk+1,u
+                    pshs      a
+                    lsra
+                    lsra
+                    lsra
+                    sta       >FM11_DMA0_ADDR_H
+                    puls      a
+                    anda      #$07
+                    lsla
+                    lsla
+                    lsla
+                    lsla
+                    lsla
+                    adda      V.LocalBuf,u
+                    sta       >FM11_DMA0_ADDR_M
+                    lda       V.LocalBuf+1,u
+                    sta       >FM11_DMA0_ADDR_L
+                    rts
+
+SetupAssetDMA1      lda       V.AssetBlk+1,u
+                    pshs      a
+                    lsra
+                    lsra
+                    lsra
+                    sta       >FM11_DMA1_ADDR_H
+                    puls      a
+                    anda      #$07
+                    lsla
+                    lsla
+                    lsla
+                    lsla
+                    lsla
+                    adda      V.LocalBuf,u
+                    sta       >FM11_DMA1_ADDR_M
+                    lda       V.LocalBuf+1,u
+                    sta       >FM11_DMA1_ADDR_L
+                    rts
+
+WriteAsset2D256     pshs      cc
+                    orcc      #IntMasks
+                    lbsr      SetupAssetDMA0
+                    lda       #1
+                    sta       >FM11_DMA0_COUNT_H
+                    clr       >FM11_DMA0_COUNT_L
+                    lda       #FM11_DMA_ENABLE+FM11_DMA_DIR_WRITE
+                    sta       >FM11_DMA0_MODE
+                    lda       #FM11_MFDC_WRITESEC
+                    sta       >FM11_MFDC_CMD
+                    puls      cc
+                    lbsr      DMA0Wait
+                    bcs       WriteAssetError
+                    lda       >FM11_MFDC_STATUS
+                    bita      #FM11_MFDC_ERRMASK
+                    bne       WriteAssetError
+                    clrb
+                    andcc     #^Carry
+                    rts
+
+WriteAsset2HD256    pshs      cc
+                    orcc      #IntMasks
+                    lbsr      SetupAssetDMA1
+                    lda       #1
+                    sta       >FM11_DMA1_COUNT_H
+                    clr       >FM11_DMA1_COUNT_L
+                    lda       #FM11_DMA_ENABLE+FM11_DMA_DIR_WRITE
+                    sta       >FM11_DMA1_MODE
+                    lda       #FM11_FDC_WRITESEC
+                    sta       >FM11_FDC_CMD
+                    puls      cc
+                    lbsr      DMA1Wait
+                    bcs       WriteAssetError
+                    lda       >FM11_FDC_STATUS
+                    bita      #FM11_FDC_ERRMASK
+                    bne       WriteAssetError
+                    clrb
+                    andcc     #^Carry
+                    rts
+
+WriteAsset2HD128    pshs      cc
+                    orcc      #IntMasks
+                    lbsr      SetupAssetDMA1
+                    clr       >FM11_DMA1_COUNT_H
+                    lda       #$80
+                    sta       >FM11_DMA1_COUNT_L
+                    lda       #FM11_DMA_ENABLE+FM11_DMA_DIR_WRITE
+                    sta       >FM11_DMA1_MODE
+                    lda       #FM11_FDC_WRITESEC
+                    sta       >FM11_FDC_CMD
+                    puls      cc
+                    lbsr      DMA1Wait
+                    bcs       WriteAssetError
+                    lda       >FM11_FDC_STATUS
+                    bita      #FM11_FDC_ERRMASK
+                    bne       WriteAssetError
+                    clrb
+                    andcc     #^Carry
+                    rts
+
+WriteAssetError     orcc      #Carry
                     ldb       #E$Write
                     rts
 

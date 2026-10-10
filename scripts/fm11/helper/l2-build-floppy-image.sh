@@ -111,6 +111,9 @@ build_cpu() {
     # reserved-cylinder handling used by the Level 1 distribution.
     build "$ROOT/level1/fm11/cmds/format.asm"       format
 
+    # FM-11 Cobbler has explicit Level 1/Level 2 paths in the shared source.
+    build "$ROOT/level1/fm11/cmds/cobbler.asm"      cobbler
+
     # pd.asm is the common source for Pwd and Pxd.
     build "$ROOT/level1/cmds/pd.asm"               pwd -DPWD=1
     build "$ROOT/level1/cmds/pd.asm"               pxd -DPXD=1
@@ -185,7 +188,7 @@ build_media() {
         more:More dcheck:DCheck backup:Backup pwd:Pwd pxd:Pxd \
         minted:MinTED ded:dEd \
         dmem:DMem mfree:MFree mmap:MMap pmap:PMap proc:Proc \
-        format:Format
+        format:Format cobbler:Cobbler
     do
         src=${item%%:*}
         dst=${item#*:}
@@ -204,6 +207,18 @@ build_media() {
     do
         os9 copy -o=0 "$OUT/$module" "$RBF,SYS/MODULES/$module"
     done
+
+    # Cobbler reads target-specific IPL and kernel-track images from /DD/SYS.
+    # Install all target profiles on every system floppy so a 2D booted
+    # system may cobble 2HD/HDD media and vice versa.
+    os9 makdir "$RBF,SYS/IPL"
+    os9 makdir "$RBF,SYS/BOOT"
+    os9 copy -o=0 "$OUT/IPL.2D"     "$RBF,SYS/IPL/IPL.2D"
+    os9 copy -o=0 "$OUT/IPL.2HD"    "$RBF,SYS/IPL/IPL.2HD"
+    os9 copy -o=0 "$OUT/IPL.HD"     "$RBF,SYS/IPL/IPL.HD"
+    os9 copy -o=0 "$OUT/Bootp1.2D"  "$RBF,SYS/BOOT/Bootp1.2D"
+    os9 copy -o=0 "$OUT/Bootp1.2HD" "$RBF,SYS/BOOT/Bootp1.2HD"
+    os9 copy -o=0 "$OUT/Bootp1.HD"  "$RBF,SYS/BOOT/Bootp1.HD"
 
     python3 "$DIR/patch-boot-descriptor.py" "$RBF"
 

@@ -79,7 +79,13 @@ eflag               rmb       1
 bootloc             rmb       3
                     ifne      fm11
 FMAssetPath         rmb       1
-FMFileBuf           rmb       4352                17 x 256-byte Bootp1 image
+                    ifgt      Level-1
+FM11BootSectors     equ       21                  Level 2 REL/Boot/Krn track
+                    else
+FM11BootSectors     equ       17                  Level 1 boot track
+                    endc
+FM11BootBytes       equ       FM11BootSectors*256
+FMFileBuf           rmb       FM11BootBytes
                     endc
                     ifgt      Level-1
 u057E               rmb       76
@@ -378,6 +384,20 @@ L019F               lda       #WRITE.
                     puls      u
                     lbcs      Bye
                     leax      >u057E,u
+                    ifne      fm11
+* FM-11 Level 2: use the same target-profile behavior as Level 1.
+* D.BtPtr/D.BtSz describe the resident OS9Boot in the system map.  Walk it
+* module-by-module through F$CpyMem and replace only D0/D1/D2/D3/DD/H0.
+                    ldd       <D.BtPtr,x
+                    std       <u0034+4,u          source address
+                    ldd       <D.BtSz,x
+                    std       <u0034+6,u          source bytes remaining
+                    clra
+                    clrb
+                    std       <DD.BSZ
+                    lbsr      FMWriteBootFileL2
+                    lbcs      Bye
+                    else
                     ldd       <D.BtPtr,x
                     pshs      b,a
                     ldd       <D.BtSz,x
@@ -413,6 +433,7 @@ L0203               pshs      y
                     sty       ,s
                     bne       L01F7
                     leas      $04,s
+                    endc
 
                     else
 
@@ -526,7 +547,7 @@ FMCobTargetHD       leax      >FMIPLHDName,pcr
                     os9       I$SetStt
                     lbcs      FMIPLBad
                     ldx       <u0034+8,u
-                    ldy       #4352
+                    ldy       #FM11BootBytes
                     lbsr      FMReadAsset
                     lbcs      FMAssetBad
                     lda       <devpath
@@ -549,7 +570,7 @@ FMCobWriteIPL       ldy       #1024
                     lbcs      FMIPLBad
 
                     ldx       <u0034+8,u          matching /DD/SYS/BOOT pathname
-                    ldy       #4352               17 physical 256-byte sectors
+                    ldy       #FM11BootBytes      target-specific kernel track
                     lbsr      FMReadAsset
                     lbcs      FMAssetBad
                     lda       <devpath
@@ -599,6 +620,149 @@ FMIPLDMAWait        leax      >FMIPLDMAWaitMsg,pcr
                     clrb
                     lbra      DisplayErrorAndExit
 
+                    ifgt      Level-1
+********************************************************************
+* FMWriteBootFileL2
+*
+* Level 2 equivalent of FMWriteBootFile.  The resident OS9Boot lives in the
+* system DAT image, so copy one module at a time through F$CpyMem.  Normal
+* modules are written unchanged; FMSelectDesc returns an embedded target
+* descriptor for D0/D1/D2/D3/DD/H0 when substitution is required.
+*
+* u0034+4  source logical address in system DAT
+* u0034+6  source bytes remaining
+* u0034+14 current source-module bytes remaining
+* u004B    current copy-chunk size
+********************************************************************
+FMWriteBootFileL2
+FMWL2Next           ldd       <u0034+6,u
+                    lbeq      FMWL2Done
+                    cmpd      #$0010
+                    lblo      FMWL2Bad
+
+* Read enough of the module header to inspect M$Size and M$Name.
+                    leax      <u004E,u
+                    tfr       x,d                 DAT image pointer
+                    ldx       <u0034+4,u
+                    ldy       #$0010
+                    pshs      u
+                    leau      >u057E,u
+                    os9       F$CpyMem
+                    puls      u
+                    lbcs      FMWL2Exit
+
+                    leax      >u057E,u
+                    ldd       M$Size,x
+                    lbeq      FMWL2Bad
+                    cmpd      <u0034+6,u
+                    lbhi      FMWL2Bad
+                    std       <u0034+14,u         original module size
+
+* FMSelectDesc examines the FCS module name through M$Name.  The first
+* F$CpyMem above copied only the module header, so the name itself is not
+* necessarily present in the local buffer.  Copy the first two name bytes
+* from the system DAT to the corresponding offset in u057E; those two bytes
+* are sufficient to distinguish D0/D1/D2/D3/DD/H0.
+                    leax      >u057E,u
+                    ldd       M$Name,x
+                    pshs      d
+                    addd      #2
+                    cmpd      <u0034+14,u
+                    bls       FMWL2NameInRange
+                    leas      2,s
+                    lbra      FMWL2Bad
+FMWL2NameInRange    puls      d                   module-name offset
+                    pshs      d
+                    addd      <u0034+4,u
+                    std       <u004B,u             source name address
+                    puls      d
+                    leay      >u057E,u
+                    leay      d,y                 local name destination
+                    leax      <u004E,u
+                    tfr       x,d                 source DAT image pointer
+                    ldx       <u004B,u
+                    pshs      u
+                    tfr       y,u
+                    ldy       #2
+                    os9       F$CpyMem
+                    puls      u
+                    lbcs      FMWL2Exit
+
+                    leax      >u057E,u
+                    tfr       x,y                 remember local header address
+                    lbsr      FMSelectDesc
+                    pshs      y
+                    cmpx      ,s
+                    leas      2,s
+                    beq       FMWL2CopyOriginal
+
+* Descriptor substitution.  Advance through the source by the original
+* module size, but account DD.BSZ using the replacement module size.
+                    ldy       M$Size,x
+                    lda       <newbpath
+                    os9       I$Write
+                    lbcs      FMWL2Exit
+                    tfr       y,d
+                    addd      <DD.BSZ
+                    std       <DD.BSZ
+
+                    ldd       <u0034+4,u
+                    addd      <u0034+14,u
+                    std       <u0034+4,u
+                    ldd       <u0034+6,u
+                    subd      <u0034+14,u
+                    std       <u0034+6,u
+                    lbra      FMWL2Next
+
+* Copy an ordinary module in <=8 KiB chunks.  u057E..u05CA provides the
+* existing Level 2 external-memory buffer used by the original Cobbler code.
+FMWL2CopyOriginal   ldd       <u0034+14,u
+                    lbeq      FMWL2Next
+                    cmpd      #$2000
+                    bls       FMWL2ChunkReady
+                    ldy       #$2000
+                    bra       FMWL2HaveChunk
+FMWL2ChunkReady     tfr       d,y
+FMWL2HaveChunk      sty       <u004B,u
+
+                    leax      <u004E,u
+                    tfr       x,d                 DAT image pointer
+                    ldx       <u0034+4,u
+                    ldy       <u004B,u
+                    pshs      u
+                    leau      >u057E,u
+                    os9       F$CpyMem
+                    puls      u
+                    bcs       FMWL2Exit
+
+                    leax      >u057E,u
+                    ldy       <u004B,u
+                    lda       <newbpath
+                    os9       I$Write
+                    bcs       FMWL2Exit
+
+                    ldd       <u004B,u
+                    addd      <DD.BSZ
+                    std       <DD.BSZ
+                    ldd       <u0034+4,u
+                    addd      <u004B,u
+                    std       <u0034+4,u
+                    ldd       <u0034+6,u
+                    subd      <u004B,u
+                    std       <u0034+6,u
+                    ldd       <u0034+14,u
+                    subd      <u004B,u
+                    std       <u0034+14,u
+                    lbra      FMWL2CopyOriginal
+
+FMWL2Bad            orcc      #Carry
+                    ldb       #E$Read
+                    rts
+FMWL2Done           clrb
+                    andcc     #^Carry
+FMWL2Exit           rts
+                    endc
+
 ********************************************************************
 * FMWriteBootFile
 *
@@ -608,6 +772,7 @@ FMIPLDMAWait        leax      >FMIPLDMAWaitMsg,pcr
 * This preserves the running system's kernel/managers/drivers while making
 * /D0-/D3 and /DD correct for a 2D or 2HD target independently of /DD.
 ********************************************************************
+                    ifeq      Level-1
 FMWriteBootFile     ldx       >D.BTLO
                     stx       <u0034+4,u          current source module
                     ldx       >D.BTHI
@@ -635,6 +800,7 @@ FMWBLoop            ldx       <u0034+4,u
 FMWBDone            clrb
                     andcc     #^Carry
 FMWBExit            rts
+                    endc
 
 * Input X = resident module.  Return X = module to write.
 * Exact FM-11 boot descriptors D0/D1/D2/D3/DD/H0 are replaced for the target media.
