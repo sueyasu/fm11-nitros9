@@ -1,7 +1,7 @@
 ********************************************************************
 * Boot - FM-11 MDC hard disk Boot module
 *
-* RBF LSN0 begins at physical sector 19.  boot_common follows DD.BT,
+* RBF LSN0 begins at physical sector 32.  boot_common follows DD.BT,
 * including the fragmented OS9Boot form used by FM-11 OS9Gen/Cobbler.
 ********************************************************************
                     nam       Boot
@@ -9,7 +9,7 @@
                     ifp1
                     use       defsfile
                     endc
-BootReserveSectors  equ       19
+BootReserveSectors  equ       32
 MDCResultReady      equ       $40
 MDCError            equ       $80
 MDCBinaryMask       equ       $70

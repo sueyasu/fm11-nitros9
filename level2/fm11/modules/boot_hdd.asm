@@ -4,7 +4,8 @@
 * Physical sectors:
 *   0-1   ROM IPL
 *   2-22  21-sector Level 2 kernel track
-*   23-   RBF filesystem (LSN0 == physical sector 23)
+*   23-31 reserved for future boot-area growth
+*   32-   RBF filesystem (LSN0 == physical sector 32)
 ********************************************************************
                     nam       Boot
                     ttl       FM-11 Level 2 MDC hard disk Boot module
@@ -13,7 +14,7 @@
                     use       defsfile
                     endc
 
-BootReserveSectors  equ       23
+BootReserveSectors  equ       32
 MDCResultReady      equ       $40
 MDCError            equ       $80
 MDCBinaryMask       equ       $70

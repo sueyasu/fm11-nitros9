@@ -421,7 +421,7 @@ err@                pshs      b
 * SS.WTrk physical-format operation.  FORMAT is an FM-11-specific command, so
 * TYP.HARD is sufficient to select logical RBF initialization only; do not
 * dereference the Level 2 device-table descriptor pointer here.
-* Physical sectors 0-18 are reserved for HDD IPL/Bootp1.
+* Physical sectors 0-31 are reserved for the FM-11 HDD boot area.
 ********************************************************************
 FM11HDAdjust        clr       <fm11hdd
                     lda       <dtype
@@ -943,10 +943,10 @@ L0344               exg       d,x
                     adcb      #$00
                     stb       <totsects
 ack@
-                    tst       <fm11hdd            FM-11 HDD reserves physical sectors 0-18
+                    tst       <fm11hdd            FM-11 HDD reserves physical sectors 0-31
                     beq       GD_NoHDReserve
                     ldd       <totsects+1
-                    subd      #19
+                    subd      #32
                     std       <totsects+1
                     bcc       GD_NoHDReserve
                     dec       <totsects

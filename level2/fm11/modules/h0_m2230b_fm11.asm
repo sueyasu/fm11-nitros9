@@ -38,7 +38,7 @@ edition             set       1
                     fcb       0                   IT.SToff
                     fcb       0                   IT.SOFF1
                     fcb       0                   IT.SOFF2
-                    fcb       23                  IT.SOFF3; sectors 0-22 reserved for L2 boot
+                    fcb       32                  IT.SOFF3; sectors 0-31 reserved for FM-11 HDD boot area
 initsize            equ       *
                     fdb       lldrv               IT.LLDRV
                     fcb       $FF                 IT.MPI
