@@ -1,5 +1,4 @@
 #!/bin/sh
-fm11_repo_root() { CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd; }
 fm11_check_cpu() { case "$1" in 6809|6309) ;; *) return 1 ;; esac; }
 fm11_check_media() { case "$1" in 2d|2hd|all) ;; *) return 1 ;; esac; }
 fm11_level_name() { case "$1" in 1|l1|L1|level1|Level1) echo 1 ;; 2|l2|L2|level2|Level2) echo 2 ;; *) return 1 ;; esac; }

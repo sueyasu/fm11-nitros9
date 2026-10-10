@@ -1,7 +1,8 @@
 #!/bin/sh
 set -eu
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+ROOT=$(CDPATH= cd -- "$DIR/../../.." && pwd)
 FM="$ROOT/level2/fm11"
 
 usage() {
@@ -25,7 +26,7 @@ build_one() {
             ;;
     esac
 
-    "$FM/build-core.sh" "$CPU"
+    "$DIR/l2-build-core.sh" "$CPU"
     OUT="$FM/build-core-$CPU"
 
     NOS9VER=${NOS9VER:-0}

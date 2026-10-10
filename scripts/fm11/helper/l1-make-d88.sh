@@ -1,7 +1,8 @@
 #!/bin/sh
 set -eu
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+ROOT=$(CDPATH= cd -- "$DIR/../../.." && pwd)
 CPU=${1:-}
 case "$CPU" in
     6809|6309) ;;
@@ -53,12 +54,12 @@ make_image() {
     rbftmp=$(mktemp)
     trap 'rm -f "$rbftmp"' EXIT INT TERM
     cp "$rbf" "$rbftmp"
-    "$ROOT/patch-boot-descriptor.py" "$rbftmp"
-    "$ROOT/patch-rbf-floppy.py" "$rbftmp" "$profile"
+    "$DIR/patch-boot-descriptor.py" "$rbftmp"
+    "$DIR/patch-rbf-floppy.py" "$rbftmp" "$profile"
 
     tmpd88="$d88.tmp.$$"
     rm -f "$tmpd88"
-    python3 "$ROOT/make-d88.py" "$profile" "$rbftmp" "$ipl" "$bt" "$tmpd88"
+    python3 "$DIR/make-d88.py" "$profile" "$rbftmp" "$ipl" "$bt" "$tmpd88"
     mv "$tmpd88" "$d88"
 
     rm -f "$rbftmp"

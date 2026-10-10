@@ -1,7 +1,8 @@
 #!/bin/sh
 set -eu
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+ROOT=$(CDPATH= cd -- "$DIR/../../.." && pwd)
 CPU=${1:-}
 case "$CPU" in
     6809|6309) ;;
@@ -90,7 +91,7 @@ install_sys_contents() {
     sys_tmp=$(mktemp -d "${TMPDIR:-/tmp}/fm11-sys.XXXXXX")
     trap 'rm -rf "$sys_tmp"' EXIT HUP INT TERM
 
-    python3 "$ROOT/make-sys-files.py" \
+    python3 "$DIR/make-sys-files.py" \
         --sysdir "$ROOT/level1/sys" \
         --help-overlay "$ROOT/level1/fm11/sys" \
         --outdir "$sys_tmp" "$@"
@@ -265,7 +266,7 @@ install_rbf_contents() {
     install_os9gen_assets "$rbf"
 
     # DD.BT/DD.BSZ belong to the filesystem and remain ToolShed-compatible.
-    "$ROOT/patch-boot-descriptor.py" "$rbf"
+    "$DIR/patch-boot-descriptor.py" "$rbf"
 }
 
 make_2d() {
@@ -301,4 +302,4 @@ case "$MODE" in
 esac
 
 echo "Edit the .rbf master image(s) directly with ToolShed, then run:"
-echo "  ./make-fm11-image.sh $CPU"
+echo "  ./scripts/fm11/build-images.sh 1 $CPU"

@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-. "$DIR/common.sh"
-ROOT=$(fm11_repo_root)
+. "$DIR/helper/common.sh"
+ROOT=$(CDPATH= cd -- "$DIR/../.." && pwd)
 usage() { echo "usage: $0 m2230b|m2231b|m2232b|m2233b|m2234b|m2235b|m2241b|m2242b|m2243b" >&2; exit 2; }
 MODEL=${1:-}
 set -- $(fm11_hdd_geometry "$MODEL") || usage

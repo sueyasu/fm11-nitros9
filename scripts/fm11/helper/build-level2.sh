@@ -2,11 +2,11 @@
 set -eu
 DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$DIR/common.sh"
-ROOT=$(fm11_repo_root)
+ROOT=$(CDPATH= cd -- "$DIR/../../.." && pwd)
 CPU=${1:-}; MEDIA=${2:-all}
 fm11_check_cpu "$CPU" || { echo "usage: $0 6809|6309 [2d|2hd|all]" >&2; exit 2; }
 fm11_check_media "$MEDIA" || { echo "usage: $0 6809|6309 [2d|2hd|all]" >&2; exit 2; }
-"$ROOT/level2/fm11/build-floppy-image.sh" "$CPU" "$MEDIA"
+"$DIR/l2-build-floppy-image.sh" "$CPU" "$MEDIA"
 rename_one() {
     profile=$1
     for ext in rbf d88; do

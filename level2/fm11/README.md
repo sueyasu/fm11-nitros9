@@ -52,6 +52,12 @@ task 1 for the currently running user process.  NitrOS-9 may continue to
 manage its normal software task/DAT images.  Use of the FM-11's additional
 persistent hardware task maps is a later optimization.
 
-`build-core.sh all` builds the 6809 and HD6309 bootstrap core.  This first
-stage produces the IPL and fixed-layout kernel track, but does not yet
-construct the complete OS9Boot/RBF 2D disk image.
+Build and image-generation scripts are kept under `scripts/fm11/`.
+
+The normal entry point is:
+
+    scripts/fm11/build-images.sh 2 6809
+
+Internal Level 2 build helpers are under `scripts/fm11/helper/`.  For
+example, `scripts/fm11/helper/l2-build-core.sh all` builds the 6809 and
+HD6309 bootstrap cores without constructing complete floppy images.

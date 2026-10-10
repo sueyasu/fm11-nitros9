@@ -1,27 +1,13 @@
 #!/bin/sh
 set -eu
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+ROOT=$(CDPATH= cd -- "$DIR/../../.." && pwd)
 FM="$ROOT/level2/fm11"
 
 usage() {
-    echo "usage: $0 6809|6309|all [m2230b|m2231b|m2232b|m2233b|m2234b|m2235b|m2241b|m2242b|m2243b|all]" >&2
+    echo "usage: $0 6809|6309|all 2d|2hd|all" >&2
     exit 2
-}
-
-geometry() {
-    case "$1" in
-        m2230b) echo "315 2" ;;
-        m2231b) echo "157 4" ;;
-        m2232b) echo "157 6" ;;
-        m2233b) echo "315 4" ;;
-        m2234b) echo "315 6" ;;
-        m2235b) echo "315 8" ;;
-        m2241b) echo "747 4" ;;
-        m2242b) echo "747 7" ;;
-        m2243b) echo "747 11" ;;
-        *) return 1 ;;
-    esac
 }
 
 need_tool() {
@@ -33,7 +19,7 @@ need_tool() {
 
 build_cpu() {
     CPU=$1
-    MODELSEL=$2
+    MEDIASEL=$2
 
     case "$CPU" in
         6809) LWCPU=--6809; H6309=0 ;;
@@ -41,7 +27,7 @@ build_cpu() {
         *) usage ;;
     esac
 
-    "$FM/build-runtime.sh" "$CPU"
+    "$DIR/l2-build-runtime.sh" "$CPU"
     OUT="$FM/build-core-$CPU"
 
     NOS9VER=${NOS9VER:-0}
@@ -76,12 +62,9 @@ build_cpu() {
     build "$ROOT/level2/modules/clock.asm"       clock
     build "$ROOT/level1/modules/clock2_soft.asm" clock2_soft
     build "$ROOT/level1/modules/sysgo.asm"       sysgo -DDD=1
-    build "$ROOT/level2/modules/rbf.asm"         rbf
+    build "$ROOT/level2/modules/rbf.asm"          rbf
     build "$ROOT/level1/cmds/shell_21.asm"       shell
     build "$ROOT/level1/cmds/dir.asm"            dir
-    build "$ROOT/level1/cmds/free.asm"           free
-
-    # Match the normal command set installed in the floppy images.
     build "$ROOT/level1/cmds/sleep.asm"          sleep
     build "$ROOT/level2/cmds/procs.asm"          procs
     build "$ROOT/level1/cmds/date.asm"           date
@@ -95,8 +78,11 @@ build_cpu() {
     build "$ROOT/level1/cmds/del.asm"            del
     build "$ROOT/level1/cmds/attr.asm"           attr
     build "$ROOT/level1/cmds/list.asm"           list
+    build "$ROOT/level1/cmds/free.asm"           free
 
     # Additional standard commands used by the Level 1 FM-11 distribution.
+    # These are generic commands that do not require FM-11-specific low-level
+    # device services and can be shared with Level 2 as-is.
     for cmd in \
         build deiniz deldir devs dmode dump echo ident iniz link \
         mdir merge prompt rename save setime tee touch tsmon verify \
@@ -129,49 +115,49 @@ build_cpu() {
     build "$ROOT/level1/cmds/pd.asm"               pwd -DPWD=1
     build "$ROOT/level1/cmds/pd.asm"               pxd -DPXD=1
 
-    case "$MODELSEL" in
+    case "$MEDIASEL" in
+        2d|2hd) build_media "$CPU" "$MEDIASEL" "$OUT" ;;
         all)
-            for m in m2230b m2231b m2232b m2233b m2234b m2235b m2241b m2242b m2243b; do
-                build_model "$CPU" "$m" "$OUT"
-            done
+            build_media "$CPU" 2d "$OUT"
+            build_media "$CPU" 2hd "$OUT"
             ;;
-        *)
-            geometry "$MODELSEL" >/dev/null || usage
-            build_model "$CPU" "$MODELSEL" "$OUT"
-            ;;
+        *) usage ;;
     esac
 }
 
-build_model() {
+build_media() {
     CPU=$1
-    MODEL=$2
+    MEDIA=$2
     OUT=$3
 
-    set -- $(geometry "$MODEL")
-    CYL=$1
-    HEADS=$2
-    TOTAL=$((CYL * HEADS * 32))
-    RESERVE=32
-    RBF_SECTORS=$((TOTAL - RESERVE))
+    case "$MEDIA" in
+        2d)
+            BOOTLIST="$FM/bootlists/bootlist.2d"
+            RBF_SECTORS=$((39 * 2 * 16))
+            IPL="$OUT/ipl-2d.bin"
+            KERNELTRACK="$OUT/kerneltrack-2d"
+            ;;
+        2hd)
+            BOOTLIST="$FM/bootlists/bootlist.2hd"
+            RBF_SECTORS=$((76 * 2 * 26))
+            IPL="$OUT/ipl-2hd.bin"
+            KERNELTRACK="$OUT/kerneltrack-2hd"
+            ;;
+        *) usage ;;
+    esac
 
-    OS9BOOT="$OUT/OS9Boot-hd-$MODEL"
+    OS9BOOT="$OUT/OS9Boot-$MEDIA"
     : > "$OS9BOOT"
-
-    for module in \
-        krnp2 fm11trampmod ioman init_fm11 rbf rbsuper \
-        llfm11 llfm11hd "dd_${MODEL}_fm11" "h0_${MODEL}_fm11" \
-        d0_fm11 d1_fm11 d2_fm11 d3_fm11 \
-        md0_fm11 md1_fm11 nd0_fm11 nd1_fm11 \
-        scf fm11console term_fm11 \
-        fm11serial t1_fm11 clock clock2_soft sysgo \
-        pipeman piper pipe shell
-    do
+    while IFS= read -r module; do
+        case "$module" in
+            ''|'#'*) continue ;;
+        esac
         if [ ! -f "$OUT/$module" ]; then
             echo "Missing boot module: $OUT/$module" >&2
             exit 1
         fi
         cat "$OUT/$module" >> "$OS9BOOT"
-    done
+    done < "$BOOTLIST"
 
     OS9SIZE=$(wc -c < "$OS9BOOT" | tr -d ' ')
     if [ "$OS9SIZE" -eq 0 ] || [ "$OS9SIZE" -gt 65535 ]; then
@@ -179,13 +165,14 @@ build_model() {
         exit 1
     fi
 
-    RBF="$ROOT/fm11-l2-system-$CPU-$MODEL.rbf"
-    HDD="$ROOT/fm11-l2-system-$CPU-$MODEL.hdd"
-    rm -f "$RBF" "$HDD"
+    RBF="$ROOT/fm11-l2-system-$CPU-$MEDIA.rbf"
+    D88="$ROOT/fm11-l2-system-$CPU-$MEDIA.d88"
+    rm -f "$RBF" "$D88"
 
-    os9 format -e -l"$RBF_SECTORS" -bs256 -q "$RBF" -n"FM11L2HD"
+    os9 format -e -l"$RBF_SECTORS" -bs256 -q "$RBF" -n"FM11L2"
     os9 copy -o=0 "$OS9BOOT" "$RBF,OS9Boot"
     os9 makdir "$RBF,CMDS"
+
     for item in \
         shell:Shell dir:Dir sleep:Sleep procs:Procs date:Date tmode:TMode \
         copy:Copy dsave:DSave cmp:Cmp load:Load unlink:Unlink \
@@ -206,39 +193,36 @@ build_model() {
         os9 attr "$RBF,CMDS/$dst" -e -pe >/dev/null
     done
 
-    python3 "$ROOT/patch-boot-descriptor.py" "$RBF"
+    # Keep all supported H0 profiles in /SYS/MODULES.  M2233B alone is
+    # resident in the default OS9Boot; the others are alternate source modules.
+    os9 makdir "$RBF,SYS"
+    os9 makdir "$RBF,SYS/MODULES"
+    for module in llfm11hd \
+        h0_m2230b_fm11 h0_m2231b_fm11 h0_m2232b_fm11 \
+        h0_m2233b_fm11 h0_m2234b_fm11 h0_m2235b_fm11 \
+        h0_m2241b_fm11 h0_m2242b_fm11 h0_m2243b_fm11
+    do
+        os9 copy -o=0 "$OUT/$module" "$RBF,SYS/MODULES/$module"
+    done
 
-    IPLTMP=$(mktemp "${TMPDIR:-/tmp}/fm11-l2-hdipl.XXXXXX")
-    BOOTTMP=$(mktemp "${TMPDIR:-/tmp}/fm11-l2-hdboot.XXXXXX")
-    trap 'rm -f "$IPLTMP" "$BOOTTMP"' EXIT HUP INT TERM
-    cp "$OUT/ipl-hd.bin" "$IPLTMP"
-    truncate -s 512 "$IPLTMP"
+    python3 "$DIR/patch-boot-descriptor.py" "$RBF"
 
-    cat "$IPLTMP" "$OUT/kerneltrack-hd" > "$BOOTTMP"
-    RESERVED_BYTES=$((RESERVE * 256))
-    BOOTSIZE=$(wc -c < "$BOOTTMP" | tr -d ' ')
-    if [ "$BOOTSIZE" -gt "$RESERVED_BYTES" ]; then
-        echo "HDD boot area too large for $MODEL: $BOOTSIZE (max $RESERVED_BYTES)" >&2
-        exit 1
-    fi
-    truncate -s "$RESERVED_BYTES" "$BOOTTMP"
-    cat "$BOOTTMP" "$RBF" > "$HDD"
-    rm -f "$IPLTMP" "$BOOTTMP"
-    trap - EXIT HUP INT TERM
+    RBFTMP=$(mktemp "${TMPDIR:-/tmp}/fm11-l2-rbf.XXXXXX")
+    cp "$RBF" "$RBFTMP"
+    python3 "$DIR/patch-rbf-floppy.py" "$RBFTMP" "$MEDIA"
 
-    EXPECT=$((TOTAL * 256))
-    ACTUAL=$(wc -c < "$HDD" | tr -d ' ')
-    if [ "$ACTUAL" -ne "$EXPECT" ]; then
-        echo "HDD image size error for $MODEL: $ACTUAL (expected $EXPECT)" >&2
-        exit 1
-    fi
+    python3 "$DIR/make-d88-l2-floppy.py" \
+        "$RBFTMP" "$IPL" "$KERNELTRACK" "$D88" \
+        --media "$MEDIA" --label "FM11 L2 $CPU $MEDIA"
 
-    echo "FM-11 Level 2 $CPU $MODEL HDD image:"
-    echo "  geometry: $CYL cylinders x $HEADS heads x 32 sectors"
-    echo "  reserved: sectors 0-31 (IPL + kernel track + padding)"
-    echo "  RBF:      $RBF ($RBF_SECTORS sectors)"
-    echo "  OS9Boot:  $OS9SIZE bytes"
-    echo "  HDD:      $HDD ($ACTUAL bytes)"
+    rm -f "$RBFTMP"
+
+    RBFSIZE=$(wc -c < "$RBF" | tr -d ' ')
+    D88SIZE=$(wc -c < "$D88" | tr -d ' ')
+    echo "FM-11 Level 2 $CPU ${MEDIA} image:"
+    echo "  OS9Boot: $OS9SIZE bytes"
+    echo "  RBF:     $RBF ($RBFSIZE bytes)"
+    echo "  D88:     $D88 ($D88SIZE bytes)"
 }
 
 need_tool lwasm
@@ -246,13 +230,12 @@ need_tool os9
 need_tool python3
 
 CPUSEL=${1:-}
-MODELSEL=${2:-m2233b}
-
+MEDIASEL_TOP=${2:-}
 case "$CPUSEL" in
-    6809|6309) build_cpu "$CPUSEL" "$MODELSEL" ;;
+    6809|6309) build_cpu "$CPUSEL" "$MEDIASEL_TOP" ;;
     all)
-        build_cpu 6809 "$MODELSEL"
-        build_cpu 6309 "$MODELSEL"
+        build_cpu 6809 "$MEDIASEL_TOP"
+        build_cpu 6309 "$MEDIASEL_TOP"
         ;;
     *) usage ;;
 esac
