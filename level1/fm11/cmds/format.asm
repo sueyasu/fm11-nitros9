@@ -443,24 +443,26 @@ FMH_Done            rts
 * FM11Adjust
 *
 * FM-11 reserves physical cylinder 0 for IPL/boot code.  RBSuper device
-* descriptors express this with IT.SOFF=one complete cylinder.  FORMAT must
-* therefore present only the RBF-visible cylinders to its normal logic and
-* add one to the physical track number passed to SS.WTrk.
+* descriptors express this with IT.SOFF=one complete cylinder, but FORMAT is
+* a user process and must not dereference the Level 2 device-table descriptor
+* pointer directly.  Detect the FM-11 floppy format from the geometry already
+* returned by SS.Opt instead.  FORMAT then presents only the RBF-visible
+* cylinders to its normal logic and adds one to the physical track number
+* passed to SS.WTrk.
 *
-* This is intentionally descriptor-driven, so it also works on blank media.
+* This also works on blank media because the geometry comes from the path
+* options/device descriptor rather than from media contents.
 ********************************************************************
 FM11Adjust          clr       <fm11fmt
                     clr       <fm11maxcyl
                     clr       <u0048
-                    ldx       <dtentry
-                    ldx       V$DESC,x
-                    lda       IT.SOFF1,x
-                    ora       IT.SOFF2,x
+                    lda       <dtype
+                    bita      #TYP.HARD           never apply floppy boot-cylinder rules to HDD
                     lbne      FMA_Done
-                    lda       IT.SOFF3,x
-                    cmpa      #32
+                    ldd       <ncyls
+                    cmpd      #40
                     beq       FMA_2D
-                    cmpa      #52
+                    cmpd      #77
                     beq       FMA_2HD
                     lbra      FMA_Done
 
