@@ -117,6 +117,8 @@ build_one() {
     build "$ROOT/level1/cmds/attr.asm"           attr
     build "$ROOT/level1/cmds/list.asm"           list
     build "$ROOT/level1/cmds/free.asm"           free
+    build "$ROOT/level1/cmds/error.asm"          error
+    build "$ROOT/level1/cmds/help.asm"           help
 
     for cmd in \
         build deiniz deldir devs dmode dump echo ident iniz link \

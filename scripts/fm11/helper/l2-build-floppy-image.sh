@@ -63,7 +63,7 @@ build_media() {
         copy:Copy dsave:DSave cmp:Cmp load:Load unlink:Unlink \
         makdir:MakDir del:Del attr:Attr list:List free:Free \
         build:Build deiniz:DeIniz deldir:DelDir devs:Devs dmode:DMode \
-        dump:Dump echo:Echo ident:Ident iniz:Iniz link:Link mdir:MDir \
+        dump:Dump echo:Echo error:Error help:Help ident:Ident iniz:Iniz link:Link mdir:MDir \
         merge:Merge prompt:Prompt rename:Rename save:Save setime:Setime \
         tee:Tee touch:Touch tsmon:TSMon verify:Verify \
         dirsort:DirSort binex:Binex exbin:Exbin disasm:Disasm edit:Edit \
@@ -81,6 +81,28 @@ build_media() {
     # Keep all supported H0 profiles in /SYS/MODULES.  M2233B alone is
     # resident in the default OS9Boot; the others are alternate source modules.
     os9 makdir "$RBF,SYS"
+
+    # Build the standard /SYS text files exactly as Level 1 does.  Help text
+    # is generated only for commands that have a .hp source; Level 2-specific
+    # commands without one are simply omitted by make-sys-files.py.
+    sys_tmp=$(mktemp -d "${TMPDIR:-/tmp}/fm11-l2-sys.XXXXXX")
+    trap 'rm -rf "$sys_tmp"' EXIT HUP INT TERM
+    python3 "$DIR/make-sys-files.py" \
+        --sysdir "$ROOT/level1/sys" \
+        --help-overlay "$ROOT/level1/fm11/sys" \
+        --outdir "$sys_tmp" \
+        shell dir sleep procs date tmode copy dsave cmp load unlink \
+        makdir del attr list free build deiniz deldir devs dmode dump echo \
+        error help ident iniz link mdir merge prompt rename save setime tee \
+        touch tsmon verify dirsort binex exbin disasm edit more dcheck backup \
+        pwd pxd minted ded dmem mfree mmap pmap proc format cobbler os9gen
+
+    for f in errmsg helpmsg password motd modem.conf; do
+        os9 copy -o=0 "$sys_tmp/$f" "$RBF,SYS/$f"
+    done
+    rm -rf "$sys_tmp"
+    trap - EXIT HUP INT TERM
+
     os9 makdir "$RBF,SYS/MODULES"
     os9 makdir "$RBF,SYS/BOOTLISTS"
 
