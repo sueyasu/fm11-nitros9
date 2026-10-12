@@ -91,15 +91,23 @@ build_media() {
     do
         os9 copy -o=0 "$OUT/$module" "$RBF,SYS/MODULES/$module"
     done
-    for media in 2d 2hd; do
+    for list in \
+        bootlist.2d bootlist.2hd bootlist.hd \
+        bootlist.hd.m2230b bootlist.hd.m2231b bootlist.hd.m2232b \
+        bootlist.hd.m2233b bootlist.hd.m2234b bootlist.hd.m2235b \
+        bootlist.hd.m2241b bootlist.hd.m2242b bootlist.hd.m2243b
+    do
         bltmp=$(mktemp "${TMPDIR:-/tmp}/fm11-l2-bootlist.XXXXXX")
         awk '!/^#/ && NF { printf "/DD/SYS/MODULES/%s\r", $0 }' \
-            "$FM/bootlists/bootlist.$media" > "$bltmp"
-        os9 copy -o=0 "$bltmp" "$RBF,SYS/bootlist.$media"
+            "$FM/bootlists/$list" > "$bltmp"
+        os9 copy -o=0 "$bltmp" "$RBF,SYS/$list"
         rm -f "$bltmp"
     done
 
     for module in llfm11hd \
+        dd_m2230b_fm11 dd_m2231b_fm11 dd_m2232b_fm11 \
+        dd_m2233b_fm11 dd_m2234b_fm11 dd_m2235b_fm11 \
+        dd_m2241b_fm11 dd_m2242b_fm11 dd_m2243b_fm11 \
         h0_m2230b_fm11 h0_m2231b_fm11 h0_m2232b_fm11 \
         h0_m2233b_fm11 h0_m2234b_fm11 h0_m2235b_fm11 \
         h0_m2241b_fm11 h0_m2242b_fm11 h0_m2243b_fm11
