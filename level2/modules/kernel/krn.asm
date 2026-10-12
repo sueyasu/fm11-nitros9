@@ -707,7 +707,7 @@ FM11KrnBlock        tfr       b,a
                     cmpa      ,x
                     beq       FM11KrnSizeDone
                     incb
-                    cmpb      #$80
+                    cmpb      #$81
                     bne       FM11KrnBlock
 FM11KrnSizeDone     stb       <D.MemSz
                     clra
