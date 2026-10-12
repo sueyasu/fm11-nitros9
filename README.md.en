@@ -10,8 +10,7 @@ It is maintained as a fork of the upstream NitrOS-9 source tree. FM-11-specific 
 
 The basic ports of **NitrOS-9 Level 1 and Level 2** for the FM-11 are complete.
 
-Both the Motorola 6809 and Hitachi HD63C09 builds have been tested booting from 2D and 2HD floppy images and fro\
-m hard disks, and running normal system operations.
+Both the Motorola 6809 and Hitachi HD63C09 builds have been tested booting from 2D and 2HD floppy images and from hard disks, and running normal system operations.
 
 ### Common hardware and device support
 
@@ -166,8 +165,7 @@ scripts/fm11/build-images.sh 2 6809 2d
 
 ### Blank HDD images
 
-HDD images are independent of NitrOS-9 level and CPU type. The helper creates a blank image using the geometry o\
-f the specified HDD model.
+HDD images are independent of NitrOS-9 level and CPU type. The helper creates a blank image using the geometry of the specified HDD model.
 
 ```sh
 scripts/fm11/make-hdd-image.sh m2233b
@@ -179,8 +177,7 @@ Example output:
 fm11-m2233b.img
 ```
 
-The image initially contains no IPL, boot track, RBF filesystem, or OS files. Attach it to the FM-11 emulator as\
- the matching HDD model and initialize it from NitrOS-9.
+The image initially contains no IPL, boot track, RBF filesystem, or OS files. Attach it to the FM-11 emulator as the matching HDD model and initialize it from NitrOS-9.
 
 ## Floppy configuration
 
@@ -209,8 +206,7 @@ Both Level 1 and Level 2 use logical `/D0` through `/D3` aliases according to th
 
 ## HDD configuration and usage
 
-The HDD device name is `/H0` on both Level 1 and Level 2. Descriptors and boot lists are provided for each HDD m\
-odel currently supported by the FM-11 emulator.
+The HDD device name is `/H0` on both Level 1 and Level 2. Descriptors and boot lists are provided for each HDD model currently supported by the FM-11 emulator.
 
 Supported models:
 
@@ -234,8 +230,7 @@ For example, create a blank M2233B image on the host:
 scripts/fm11/make-hdd-image.sh m2233b
 ```
 
-Attach the image to the emulator as an M2233B drive and boot either a Level 1 or Level 2 system floppy. Initiali\
-ze the HDD from NitrOS-9:
+Attach the image to the emulator as an M2233B drive and boot either a Level 1 or Level 2 system floppy. Initialize the HDD from NitrOS-9:
 
 ```text
 format /h0
@@ -255,8 +250,7 @@ os9gen /h0 < /DD/SYS/BOOTLISTS/bootlist.hd.m2233b
 
 Change the model suffix for another supported HDD. `bootlist.hd` is the default M2233B profile.
 
-When using the HDD as a normal system disk, copy the required contents of `/DD/CMDS` and `/DD/SYS` from the syst\
-em floppy to the HDD as needed. `cobbler` and `os9gen` read IPL and Bootp1 data from `/DD/SYS/IPL` and `/DD/SYS/BOOT`.
+When using the HDD as a normal system disk, copy the required contents of `/DD/CMDS` and `/DD/SYS` from the system floppy to the HDD as needed. `cobbler` and `os9gen` read IPL and Bootp1 data from `/DD/SYS/IPL` and `/DD/SYS/BOOT`.
 
 ## `/DD/SYS` layout
 

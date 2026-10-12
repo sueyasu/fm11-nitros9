@@ -14,7 +14,7 @@ FM-11 向け **NitrOS-9 Level 1 / Level 2** の移植は、いずれも基本実
 
 ### 共通ハードウェア／デバイス対応
 
-Level 1 / Level 2 のデバイス対応状況は共通で、次の通りです。
+Level 1 / Level 2 のデバイス対応状況は次の通りです。
 
 - Motorola 6809 / Hitachi HD63C09
 - FM-11ローカルコンソール
@@ -178,8 +178,7 @@ scripts/fm11/make-hdd-image.sh m2233b
 fm11-m2233b.img
 ```
 
-この段階ではIPL、boot track、RBF filesystem、OSファイルは入っていません。FM-11エミュレータへ対応するHDD機種とし\\
-て接続した後、NitrOS-9上で初期化します。
+この段階ではIPL、boot track、RBF filesystem、OSファイルは入っていません。FM-11エミュレータでHDD機種を設定してから接続し、NitrOS-9上で初期化します。
 
 
 ## FDD構成
@@ -234,8 +233,7 @@ M2243B  747 cylinders x 11 heads
 scripts/fm11/make-hdd-image.sh m2233b
 ```
 
-エミュレータでこのイメージをM2233Bとして接続し、Level 1またはLevel 2のシステムFDDから起動します。NitrOS-9上では\\
-、まずHDDを初期化します。
+エミュレータでこのイメージをM2233Bとして接続し、Level 1またはLevel 2のシステムFDDから起動します。NitrOS-9上では、まずHDDを初期化します。
 
 ```text
 format /h0
