@@ -44,7 +44,7 @@ MMU_WORKSLOT        equ       MMU_SLOT_0+MMU_SLOT
 tylg                set       Drivr+Objct
 atrv                set       ReEnt+rev
 rev                 set       $01
-edition             set       4
+edition             set       5
 
                     mod       eom,name,tylg,atrv,ModEntry,size
 
@@ -192,9 +192,9 @@ Read                lda       >MMU_WORKSLOT       Save the MMU block number
                     orcc      #IntMasks
                 ifgt Level-1
                     lda       FlashBlock,u
-                    cmpa      #$40                $40-$7F is the physical Flash window
+                    cmpa      #$40                $40-$9F: onboard Flash and cartridge
                     blo       readram@
-                    cmpa      #$80
+                    cmpa      #$A0
                     bhs       readram@
                     lbsr      FlashSector2Cache   copy while Flash is briefly exposed
                     lda       CacheBlock,u        caller buffer may live in FLASHDIS RAM;
@@ -406,7 +406,7 @@ ShowFlashID         lda       #fDEBUG
                     orcc      #IntMasks
                     ldb       >MMU_WORKSLOT
                     pshs      b
-                    ldb       #$C2                Text screen block #
+                    ldb       #TEXT_RAM_BLK       Text screen block #
                     stb       >MMU_WORKSLOT 
                     tfr       x,d
                     lsra                          Do cheap binary to 4-digit HEX ASCII string
@@ -454,17 +454,13 @@ x@                  rts
 
 AskForCache         clr       RejectCount,u
 afcTry@             ldb       #1                  Flash Write mode needs an 8K swap block of RAM
-                    os9       F$AlHRAM             prefer $D0-$EF, then $A0-$BF: visible in both modes
+                    os9       F$AlHRAM             prefer high SRAM: $A0-$FB visible in both modes
                     bcs       afcFail@
                     cmpb      #$40
                     blo       afcGood@
                     cmpb      #$A0
                     blo       afcReject@
-                    cmpb      #$C0
-                    blo       afcGood@
-                    cmpb      #$D0
-                    blo       afcReject@
-                    cmpb      #$F0
+                    cmpb      #VICKY_BLK       $A0-$FB remain SRAM with FLASHDIS clear
                     blo       afcGood@
 afcReject@
 * Keep each rejected block allocated while asking for another, otherwise

@@ -40,6 +40,10 @@ RBF = rbf rbsuper llwbsd rbmem $(BOOT_RBF) s0 s1 f0 f1 c0 c1 $(RBF_EXTRA)
 SCF = scf vtio $(KEYSUB) term bannerfont palette $(SCF_EXTRA)
 ifeq ($(LEVEL),2)
 SCF += mousedrv_ps2
+# Level 2 multiterminal: /vt is the factory descriptor vtm opens new terminals on,
+# /vt1-/vt8 the extra terminals.  vtio, term and keydrv come from
+# level2/wildbits/modules, which the Level 2 search path tries first.
+SCF += vt vt1 vt2 vt3 vt4 vt5 vt6 vt7 vt8
 endif
 DRIVEWIRE_RBF = rbdw x0 x1 x2 x3
 DRIVEWIRE_SCF = scdwv n n1 n2 n3 n4 n5
@@ -100,9 +104,38 @@ $(MODDIR)/fpga: $(L1PCD)/fpga.asm | $(MODDIR)
 
 endif # K2-only RP2040 modules and command
 
+# diag: hardware diagnostics (level1/wildbits/cmds/diag.asm + diag_hw.asm, 2026-10-09), built for Level 1 and
+# Level 2 alike (2026-10-10) - the source is shared and assembles to the same bytes under either. It carries its own
+# CP437 font and text palette, copied in at build time from sys/fonts/phoenixegafont.asm and modules/palette.asm
+# (the fcb rows only, labels dropped) so its frame looks right whatever font or palette the tested system has.
+# The two generated files go in $(OBJDIR), not the recipe folder (2026-10-11): as bare names they were written
+# into the source tree on every make and left there; "make clean" removes $(OBJDIR) with them.
+CMDS += diag
+$(MODDIR)/diag: $(L1PCD)/diag.asm $(L1PCD)/diag_hw.asm $(OBJDIR)/diagfont.inc $(OBJDIR)/diagpal.inc | $(MODDIR)
+	$(AS) $(AFLAGS) -I$(OBJDIR) -I$(L1PCD) $< $(ASOUT)$@
+
+$(OBJDIR)/diagfont.inc: $(LEVEL1)/wildbits/sys/fonts/phoenixegafont.asm | $(OBJDIR)
+	sed -n '/^start/,/emod/p' $< | grep -E '^[A-Za-z0-9_]*[[:space:]]+fcb' | sed -E 's/^[A-Za-z0-9_]+//' > $@
+
+$(OBJDIR)/diagpal.inc: $(L1PMD)/palette.asm | $(OBJDIR)
+	sed -n '/^start/,/emod/p' $< | grep -E '^[A-Za-z0-9_]*[[:space:]]+fcb' | sed -E 's/^[A-Za-z0-9_]+//' > $@
+
 ifeq ($(LEVEL),2)
 # vs: VS1053 test command (wb/vs1053); on its own line so it never collides with edits to the CMDS list above
 CMDS += vs
+
+# These commands live in the Level 2 source tree. Explicit prerequisites also
+# prevent an older Level 1 object from satisfying an incremental build.
+$(MODDIR)/view: $(L2PCD)/view.asm | $(MODDIR)
+	$(AS) $(AFLAGS) $< $(ASOUT)$@
+
+# linetest: the line-drawing engine's missing-pixel probe (level2/wildbits/tests), installed as CMDS/linetest.
+CMDS += linetest
+$(MODDIR)/linetest: $(LEVEL2)/wildbits/tests/linetest.asm | $(MODDIR)
+	$(AS) $(AFLAGS) $< $(ASOUT)$@
+
+$(OBJDIR)/play.o: $(L2PCD)/play.as | $(OBJDIR)
+	$(ASM) $(AFLAGS) $< $(ASOUT)$@
 
 UTILPAK1_MODS = attr copy date del deiniz dir display list makdir mdir \
 	merge mfree procs rename tmode unlink
@@ -111,6 +144,9 @@ CMDS += dmem minted mmap modpatch \
 	gfxstatus xtclut drawtest play \
 	shellbg shellbgoff ntptime view utilpak1 fadein fadeout \
 	lutrd black hexed pixview iss
+# grfdrv256 is loaded by the Level 2 vtio; vtm manages the virtual terminals;
+# assetload loads files into RAM blocks
+CMDS += grfdrv256 vtm assetload
 endif
 # sprites moved OUT of CMDS 2026-09-09 (user): it is a hardware probe, so it
 # lives in TESTS_BIN below and reaches the disk as TESTS/sprites only. Its
@@ -288,6 +324,13 @@ $(MODDIR)/w6100tel: $(LEVEL1)/wildbits/cmds/w6100tel.as | $(MODDIR)
 
 $(MODDIR)/lcdload: $(LEVEL1)/wildbits/cmds/lcdload.as | $(MODDIR)
 	$(AS) $(AFLAGS) $< $(ASOUT)$@
+
+ifeq ($(LEVEL),2)
+# The Level 2 terminal modules are laid out by defs/wildbits_vtio.d and
+# defs/wildbits.d, and no generic rule makes a module depend on a defs file,
+# so without this an edit there silently leaves a stale module behind.
+$(MODDIR)/vtio $(MODDIR)/grfdrv256 $(MODDIR)/vtm $(MODDIR)/term $(MODDIR)/$(KEYSUB): $(DEFSDIR)/wildbits_vtio.d $(DEFSDIR)/wildbits.d
+endif
 
 $(MODDIR)/sprtest2: $(LEVEL1)/wildbits/cmds/sprtest2.asm | $(MODDIR)
 	$(AS) $(AFLAGS) $< $(ASOUT)$@
