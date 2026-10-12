@@ -1,0 +1,313 @@
+# NitrOS-9 for Fujitsu FM-11
+
+[日本語版](README.md)
+
+This repository contains a port of [NitrOS-9](https://github.com/nitros9project/nitros9) for the Fujitsu FM-11.
+
+It is maintained as a fork of the upstream NitrOS-9 source tree. FM-11-specific implementations are kept separate where practical so that upstream changes can continue to be incorporated.
+
+## Current status
+
+The basic ports of **NitrOS-9 Level 1 and Level 2** for the FM-11 are complete.
+
+Both the Motorola 6809 and Hitachi HD63C09 builds have been tested booting from 2D and 2HD floppy images and running normal system operations.
+
+### Level 1
+
+The Level 1 port currently includes:
+
+- Motorola 6809 support
+- Hitachi HD63C09 support, including native mode
+- FM-11 local console
+- USART0 serial terminal `/T1`
+- 5.25-inch 2D floppy support
+- 5.25-inch 2HD floppy support
+- FM-11 hard disk interface support
+- RBF / RBSuper
+- Pipes
+- ANSI / VT100 terminal support
+- `format`
+- `cobbler`
+- `os9gen`
+- `more`
+- MinTED / dEd
+- Standard commands, disk utilities, and diagnostic tools
+
+FM-11-specific Level 1 sources are primarily located under:
+
+```text
+level1/fm11/
+```
+
+### Level 2
+
+The Level 2 port combines pairs of the FM-11's 4 KiB MMR pages and exposes them to NitrOS-9 as normal 8 KiB DAT blocks.
+
+The current implementation includes:
+
+- Motorola 6809 support
+- Hitachi HD63C09 support
+- 8 KiB-pair MMU implementation using 4 KiB FM-11 MMR pages
+- FM-11 kernel trampoline
+- FM-11 local console
+- USART0 serial terminal `/T1`
+- 5.25-inch 2D floppy support
+- 5.25-inch 2HD floppy support
+- RBF / RBSuper
+- Pipes and Shell pipelines
+- ANSI / VT100 terminal support
+- `format`
+- `cobbler`
+- `os9gen`
+- Level 2 memory and process diagnostic commands
+- 6809 and 6309 system-image generation
+
+FM-11-specific Level 2 sources are primarily located under:
+
+```text
+level2/fm11/
+```
+
+The current Level 2 default boot lists do not include the hard-disk modules. The Level 2 system images currently distributed by this port therefore target floppy booting. HDD-related low-level code and descriptors remain in the source tree.
+
+## Build requirements
+
+The FM-11 build primarily requires:
+
+- [LWTOOLS](http://lwtools.projects.l-w.ca/), including `lwasm`
+- [ToolShed](https://github.com/n6il/toolshed), including the `os9` command
+- Python 3
+- Standard Unix command-line utilities
+
+The build scripts are intended for a Linux/Unix-like environment.
+
+## Building
+
+Clone the repository:
+
+```sh
+git clone https://github.com/sueyasu/fm11-nitros9.git
+cd fm11-nitros9
+```
+
+The common FM-11 image-build entry point is:
+
+```sh
+scripts/fm11/build-images.sh LEVEL CPU [MEDIA]
+```
+
+Accepted values are:
+
+```text
+LEVEL : 1 | 2
+CPU   : 6809 | 6309
+MEDIA : 2d | 2hd | all
+```
+
+If `MEDIA` is omitted, `all` is used.
+
+### Level 1
+
+Build the 6809 2D and 2HD images with:
+
+```sh
+scripts/fm11/build-images.sh 1 6809
+```
+
+For the 6309:
+
+```sh
+scripts/fm11/build-images.sh 1 6309
+```
+
+Generated files:
+
+```text
+fm11-l1-6809-2d.rbf
+fm11-l1-6809-2d.d88
+fm11-l1-6809-2hd.rbf
+fm11-l1-6809-2hd.d88
+
+fm11-l1-6309-2d.rbf
+fm11-l1-6309-2d.d88
+fm11-l1-6309-2hd.rbf
+fm11-l1-6309-2hd.d88
+```
+
+### Level 2
+
+For the 6809:
+
+```sh
+scripts/fm11/build-images.sh 2 6809
+```
+
+For the 6309:
+
+```sh
+scripts/fm11/build-images.sh 2 6309
+```
+
+Generated files:
+
+```text
+fm11-l2-6809-2d.rbf
+fm11-l2-6809-2d.d88
+fm11-l2-6809-2hd.rbf
+fm11-l2-6809-2hd.d88
+
+fm11-l2-6309-2d.rbf
+fm11-l2-6309-2d.d88
+fm11-l2-6309-2hd.rbf
+fm11-l2-6309-2hd.d88
+```
+
+To build only one media profile, for example:
+
+```sh
+scripts/fm11/build-images.sh 2 6809 2d
+```
+
+## Floppy configuration
+
+The physical device names are common to Level 1 and Level 2:
+
+```text
+/MD0, /MD1 = 5.25-inch 2D
+/ND0, /ND1 = 5.25-inch 2HD
+```
+
+Level 1 also uses logical `/D0` through `/D3` aliases according to the selected system profile.
+
+2D system:
+
+```text
+/D0, /D1 = 2D
+/D2, /D3 = 2HD
+```
+
+2HD system:
+
+```text
+/D0, /D1 = 2HD
+/D2, /D3 = 2D
+```
+
+The current Level 2 boot lists do not keep the `/D0` through `/D3` alias descriptors resident, in order to keep OS9Boot small. Use `/MD0`, `/MD1`, `/ND0`, and `/ND1` directly.
+
+## `/SYS` layout
+
+The FM-11 port uses the same `/SYS` layout convention for Level 1 and Level 2.
+
+Typical layout:
+
+```text
+/SYS/IPL/
+    IPL.2D
+    IPL.2HD
+    IPL.HD
+
+/SYS/BOOT/
+    Bootp1.2D
+    Bootp1.2HD
+    Bootp1.HD
+
+/SYS/MODULES/
+    ... modules used to generate boot files ...
+
+/SYS/bootlist.2d
+/SYS/bootlist.2hd
+```
+
+`cobbler` and `os9gen` read these files through `/DD/SYS`.
+
+The pathname convention is common between Level 1 and Level 2, but the file contents are not necessarily interchangeable. In particular, the Level 2 Bootp1 files contain the Level 2 kernel track with REL, Boot, and Krn.
+
+## FM-11 boot layout
+
+The FM-11 port uses floppy cylinder 0 as a reserved boot area outside the normal RBF filesystem area.
+
+For Level 2, the IPL loads a kernel track containing REL, Boot, and Krn, after which OS9Boot is loaded and the system starts.
+
+The FM-11 versions of `format`, `cobbler`, and `os9gen` understand this IPL and boot-track layout.
+
+## Source layout
+
+Important FM-11-specific files are located under:
+
+```text
+defs/fm11.d
+level1/fm11/
+level2/fm11/
+scripts/fm11/
+```
+
+### Level 1
+
+```text
+level1/fm11/
+    bootlists/   boot module lists
+    cmds/        FM-11-specific commands, ports, and diagnostics
+    ipl/         FM-11 IPL code
+    modules/     drivers, descriptors, boot and console modules
+    sys/         FM-11-specific system files
+```
+
+### Level 2
+
+```text
+level2/fm11/
+    bootlists/   Level 2 boot module lists
+    ipl/         FM-11 Level 2 IPL code
+    kernel/      FM-11-specific kernel support
+    modules/     MMU, boot, drivers, descriptors, and related modules
+```
+
+Shared upstream sources are used directly where appropriate. Substantially modified FM-11-specific sources are kept under `level1/fm11/` or `level2/fm11/` whenever practical.
+
+## Level 2 MMU model
+
+NitrOS-9 Level 2 normally manages memory in 8 KiB DAT blocks, while the FM-11 MMR works in 4 KiB pages.
+
+The FM-11 Level 2 port maps each OS-9 8 KiB block to a pair of consecutive 4 KiB MMR pages:
+
+```text
+OS-9 block 0 -> FM-11 MMR slots 0,1
+OS-9 block 1 -> FM-11 MMR slots 2,3
+OS-9 block 2 -> FM-11 MMR slots 4,5
+...
+OS-9 block 7 -> FM-11 MMR slots E,F
+```
+
+This preserves the normal NitrOS-9 Level 2 8 KiB memory-management model as far as practical while adapting it to the FM-11 hardware.
+
+## Known notes
+
+- The current Level 2 default configuration targets floppy booting.
+- A size-sensitive issue has been observed in the Level 2 initial OS9Boot load path, so the default boot lists intentionally keep the resident module set compact.
+- When adding modules to a Level 2 boot list, keep the total OS9Boot size in mind.
+- Some FM-11 emulator versions differ in their HD63C09 instruction implementation. Use an emulator version with the required 6309 fixes when testing the 6309 build.
+
+## Versioning
+
+GitHub-based versioning of this FM-11 port begins with:
+
+```text
+fm11-v0.1
+```
+
+Earlier internal version and test numbers used during initial bring-up are development history and are not part of the Git tag versioning scheme.
+
+## Upstream
+
+This repository is based on the NitrOS-9 project:
+
+[NitrOS-9 Project](https://github.com/nitros9project/nitros9)
+
+Upstream changes can continue to be incorporated while the FM-11-specific port is maintained in this repository.
+
+## License
+
+This repository retains the licensing terms of the upstream NitrOS-9 sources.
+
+Individual files may contain additional copyright or licensing information. Refer to the source files and the upstream project for details.
