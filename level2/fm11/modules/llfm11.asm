@@ -174,6 +174,7 @@ AdvBuf              inc       V.LocalBuf,u
 * Exit: carry clear when DRQ is asserted.
 *       carry set/B=E$Read when controller error or timeout occurs.
 ********************************************************************
+                  IFEQ      FM11UseDMA0
 WaitDRQ             pshs      x
                     ldx       #PIOTimeout
 WaitDRQLoop         lda       >FM11_MFDC_STATUS
@@ -192,6 +193,10 @@ WaitDRQDone         puls      x
                     clrb
                     andcc     #^Carry
                     rts
+                  ELSE
+WaitDRQ
+PIOReadError        rts
+                  ENDC
 
 ********************************************************************
 * SetupDMA0Address
