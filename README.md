@@ -10,19 +10,24 @@
 
 FM-11 向け **NitrOS-9 Level 1 / Level 2** の移植は、いずれも基本実装を完了しています。
 
-6809版とHD63C09版の双方について、2D / 2HDフロッピーからの起動と通常操作を確認しています。
+6809版とHD63C09版の双方について、2D / 2HDフロッピーおよびHDDからの起動と通常操作を確認しています。
+
+### 共通ハードウェア／デバイス対応
+
+Level 1 / Level 2 のデバイス対応状況は共通で、次の通りです。
+
+- Motorola 6809 / Hitachi HD63C09
+- FM-11ローカルコンソール
+- USART0シリアル端末
+- 5.25インチ 2D FDD
+- 5.25インチ 2HD FDD
+- 富士通製FM-11用HDD
+
 
 ### Level 1
 
 Level 1では、次の機能を実装しています。
 
-- Motorola 6809対応
-- Hitachi HD63C09対応（native modeを含む）
-- FM-11ローカルコンソール
-- USART0シリアル端末 `/T1`
-- 5.25インチ 2D FDD
-- 5.25インチ 2HD FDD
-- FM-11 HDDインターフェース
 - RBF / RBSuper
 - Pipe
 - ANSI / VT100端末制御
@@ -31,7 +36,7 @@ Level 1では、次の機能を実装しています。
 - `os9gen`
 - `more`
 - MinTED / dEd
-- 各種標準コマンド、ディスクユーティリティ、診断コマンド
+- 各種標準コマンド、ディスクユーティリティ
 
 FM-11固有のLevel 1ソースは主に次にあります。
 
@@ -45,14 +50,8 @@ Level 2では、FM-11の4 KiB MMRページを2枚ずつ組み合わせ、NitrOS-
 
 現在の実装には次が含まれます。
 
-- Motorola 6809対応
-- Hitachi HD63C09対応
 - 4 KiB MMRページを用いた8 KiBペアMMU実装
 - FM-11用kernel trampoline
-- FM-11ローカルコンソール
-- USART0シリアル端末 `/T1`
-- 5.25インチ 2D FDD
-- 5.25インチ 2HD FDD
 - RBF / RBSuper
 - Pipe / Shell pipeline
 - ANSI / VT100端末制御
@@ -60,15 +59,12 @@ Level 2では、FM-11の4 KiB MMRページを2枚ずつ組み合わせ、NitrOS-
 - `cobbler`
 - `os9gen`
 - Level 2用メモリ／プロセス診断コマンド
-- 6809 / 6309双方のシステムイメージ生成
 
 FM-11固有のLevel 2ソースは主に次にあります。
 
 ```text
 level2/fm11/
 ```
-
-現行のLevel 2標準bootlistではHDDモジュールを組み込んでいません。そのため、現在配布対象としているLevel 2システムはFDD起動を前提としています。HDD関連の低レベルコードやdescriptorはソースツリー内に残されています。
 
 ## ビルド環境
 
@@ -168,6 +164,24 @@ fm11-l2-6309-2hd.d88
 scripts/fm11/build-images.sh 2 6809 2d
 ```
 
+### ブランクHDDイメージ
+
+HDDイメージはLevelやCPUに依存しません。指定したHDD機種と同じgeometryのブランクイメージを生成します。
+
+```sh
+scripts/fm11/make-hdd-image.sh m2233b
+```
+
+生成例:
+
+```text
+fm11-m2233b.img
+```
+
+この段階ではIPL、boot track、RBF filesystem、OSファイルは入っていません。FM-11エミュレータへ対応するHDD機種とし\\
+て接続した後、NitrOS-9上で初期化します。
+
+
 ## FDD構成
 
 物理デバイス名はLevel 1 / Level 2で共通です。
@@ -177,7 +191,7 @@ scripts/fm11/build-images.sh 2 6809 2d
 /ND0, /ND1 = 5.25インチ 2HD
 ```
 
-Level 1では、システムプロファイルに応じて論理名 `/D0`～`/D3` も使用します。
+Level 1 / Level 2とも、システムプロファイルに応じて論理名 `/D0`～`/D3` も使用します。
 
 2Dシステム:
 
@@ -193,30 +207,85 @@ Level 1では、システムプロファイルに応じて論理名 `/D0`～`/D3
 /D2, /D3 = 2D
 ```
 
-Level 2の現行bootlistでは、OS9Bootサイズを抑えるため `/D0`～`/D3` のalias descriptorを常駐させておらず、`/MD0`、`/MD1`、`/ND0`、`/ND1` を直接使用します。
+## HDD構成と利用方法
 
-## `/SYS` の構成
+HDDのデバイス名はLevel 1 / Level 2とも `/H0` です。FM-11エミュレータで現在サポートしているHDD機種に合わせてdescr\
+iptorとbootlistを用意しています。
 
-FM-11版では、Level 1 / Level 2で `/SYS` 配下の配置規約を共通化しています。
+対応機種:
+
+```text
+M2230B  315 cylinders x  2 heads
+M2231B  157 cylinders x  4 heads
+M2232B  157 cylinders x  6 heads
+M2233B  315 cylinders x  4 heads
+M2234B  315 cylinders x  6 heads
+M2235B  315 cylinders x  8 heads
+M2241B  747 cylinders x  4 heads
+M2242B  747 cylinders x  7 heads
+M2243B  747 cylinders x 11 heads
+```
+
+すべて32 sectors/track、256 bytes/sectorです。既定のHDD profileはM2233Bです。
+
+例えばM2233Bを利用する場合、ホスト側でブランクイメージを生成します。
+
+```sh
+scripts/fm11/make-hdd-image.sh m2233b
+```
+
+エミュレータでこのイメージをM2233Bとして接続し、Level 1またはLevel 2のシステムFDDから起動します。NitrOS-9上では\\
+、まずHDDを初期化します。
+
+```text
+format /h0
+```
+
+現在起動中のシステム構成を基にbootable HDDを作る場合は `cobbler` を利用できます。
+
+```text
+cobbler /h0
+```
+
+bootlistを明示してOS9Bootを生成する場合は `os9gen` を利用します。M2233Bの例:
+
+```text
+os9gen /h0 < /DD/SYS/BOOTLISTS/bootlist.hd.m2233b
+```
+
+ほかのHDD機種では末尾の機種名を変更します。`bootlist.hd` は既定のM2233B profileです。
+
+HDDを通常のシステムディスクとして利用する場合は、必要に応じてシステムFDDの `/DD/CMDS` や `/DD/SYS` の内容をHDD側\
+にコピーしてください。IPLとBootp1は `cobbler` / `os9gen` が `/DD/SYS/IPL` と `/DD/SYS/BOOT` から読み込みます。
+
+
+## `/DD/SYS` の構成
+
+FM-11版では、Level 1 / Level 2で `/DD/SYS` 配下の配置規約を共通化しています。
 
 代表的な構成:
 
 ```text
-/SYS/IPL/
+/DD/SYS/IPL/
     IPL.2D
     IPL.2HD
     IPL.HD
 
-/SYS/BOOT/
+/DD/SYS/BOOT/
     Bootp1.2D
     Bootp1.2HD
     Bootp1.HD
 
-/SYS/MODULES/
+/DD/SYS/MODULES/
     ... bootfile生成用モジュール ...
 
-/SYS/bootlist.2d
-/SYS/bootlist.2hd
+/DD/SYS/BOOTLISTS/
+    bootlist.2d
+    bootlist.2hd
+    bootlist.hd
+    bootlist.hd.m2230b
+    ...
+    bootlist.hd.m2243b
 ```
 
 `cobbler` と `os9gen` は、これらのファイルを `/DD/SYS` から読み込みます。
@@ -283,20 +352,7 @@ OS-9 block 7 -> FM-11 MMR slot E,F
 
 ## 既知の注意点
 
-- Level 2の標準構成は現在FDD起動を対象としています。
-- Level 2ではOS9Bootの初期ロードサイズに依存する問題が確認されており、bootlistは必要なモジュールに絞っています。
-- そのため、Level 2のbootlistへモジュールを追加する場合はOS9Bootサイズにも注意してください。
-- FM-11エミュレータによってはHD63C09命令実装に差があるため、6309版の検証には対応済みのエミュレータを使用してください。
-
-## バージョン管理
-
-このFM-11 portのGitHub上のバージョン管理は、次のtagから開始しています。
-
-```text
-fm11-v0.1
-```
-
-初期移植時に使用した内部的な版番号やtest番号は開発履歴であり、Git tagのバージョン体系には含めません。
+- FM-11エミュレータによっては、HD63C09命令実装に差があります。6309版の動作検証には対応済みのエミュレータを使用してください。
 
 ## Upstream
 

@@ -10,19 +10,24 @@ It is maintained as a fork of the upstream NitrOS-9 source tree. FM-11-specific 
 
 The basic ports of **NitrOS-9 Level 1 and Level 2** for the FM-11 are complete.
 
-Both the Motorola 6809 and Hitachi HD63C09 builds have been tested booting from 2D and 2HD floppy images and running normal system operations.
+Both the Motorola 6809 and Hitachi HD63C09 builds have been tested booting from 2D and 2HD floppy images and fro\
+m hard disks, and running normal system operations.
+
+### Common hardware and device support
+
+Level 1 and Level 2 share the same device support:
+
+- Motorola 6809 / Hitachi HD63C09
+- FM-11 local console
+- USART0 serial terminal
+- 5.25-inch 2D floppy
+- 5.25-inch 2HD floppy
+- Fujitsu hard disk for FM-11
 
 ### Level 1
 
 The Level 1 port currently includes:
 
-- Motorola 6809 support
-- Hitachi HD63C09 support, including native mode
-- FM-11 local console
-- USART0 serial terminal `/T1`
-- 5.25-inch 2D floppy support
-- 5.25-inch 2HD floppy support
-- FM-11 hard disk interface support
 - RBF / RBSuper
 - Pipes
 - ANSI / VT100 terminal support
@@ -31,7 +36,7 @@ The Level 1 port currently includes:
 - `os9gen`
 - `more`
 - MinTED / dEd
-- Standard commands, disk utilities, and diagnostic tools
+- Standard commands, disk utilities
 
 FM-11-specific Level 1 sources are primarily located under:
 
@@ -45,30 +50,21 @@ The Level 2 port combines pairs of the FM-11's 4 KiB MMR pages and exposes them 
 
 The current implementation includes:
 
-- Motorola 6809 support
-- Hitachi HD63C09 support
 - 8 KiB-pair MMU implementation using 4 KiB FM-11 MMR pages
 - FM-11 kernel trampoline
-- FM-11 local console
-- USART0 serial terminal `/T1`
-- 5.25-inch 2D floppy support
-- 5.25-inch 2HD floppy support
 - RBF / RBSuper
-- Pipes and Shell pipelines
+- Pipes
 - ANSI / VT100 terminal support
 - `format`
 - `cobbler`
 - `os9gen`
 - Level 2 memory and process diagnostic commands
-- 6809 and 6309 system-image generation
 
 FM-11-specific Level 2 sources are primarily located under:
 
 ```text
 level2/fm11/
 ```
-
-The current Level 2 default boot lists do not include the hard-disk modules. The Level 2 system images currently distributed by this port therefore target floppy booting. HDD-related low-level code and descriptors remain in the source tree.
 
 ## Build requirements
 
@@ -168,6 +164,24 @@ To build only one media profile, for example:
 scripts/fm11/build-images.sh 2 6809 2d
 ```
 
+### Blank HDD images
+
+HDD images are independent of NitrOS-9 level and CPU type. The helper creates a blank image using the geometry o\
+f the specified HDD model.
+
+```sh
+scripts/fm11/make-hdd-image.sh m2233b
+```
+
+Example output:
+
+```text
+fm11-m2233b.img
+```
+
+The image initially contains no IPL, boot track, RBF filesystem, or OS files. Attach it to the FM-11 emulator as\
+ the matching HDD model and initialize it from NitrOS-9.
+
 ## Floppy configuration
 
 The physical device names are common to Level 1 and Level 2:
@@ -177,7 +191,7 @@ The physical device names are common to Level 1 and Level 2:
 /ND0, /ND1 = 5.25-inch 2HD
 ```
 
-Level 1 also uses logical `/D0` through `/D3` aliases according to the selected system profile.
+Both Level 1 and Level 2 use logical `/D0` through `/D3` aliases according to the selected system profile.
 
 2D system:
 
@@ -193,30 +207,84 @@ Level 1 also uses logical `/D0` through `/D3` aliases according to the selected 
 /D2, /D3 = 2D
 ```
 
-The current Level 2 boot lists do not keep the `/D0` through `/D3` alias descriptors resident, in order to keep OS9Boot small. Use `/MD0`, `/MD1`, `/ND0`, and `/ND1` directly.
+## HDD configuration and usage
 
-## `/SYS` layout
+The HDD device name is `/H0` on both Level 1 and Level 2. Descriptors and boot lists are provided for each HDD m\
+odel currently supported by the FM-11 emulator.
 
-The FM-11 port uses the same `/SYS` layout convention for Level 1 and Level 2.
+Supported models:
+
+```text
+M2230B  315 cylinders x  2 heads
+M2231B  157 cylinders x  4 heads
+M2232B  157 cylinders x  6 heads
+M2233B  315 cylinders x  4 heads
+M2234B  315 cylinders x  6 heads
+M2235B  315 cylinders x  8 heads
+M2241B  747 cylinders x  4 heads
+M2242B  747 cylinders x  7 heads
+M2243B  747 cylinders x 11 heads
+```
+
+All profiles use 32 sectors per track and 256-byte sectors. M2233B is the default HDD profile.
+
+For example, create a blank M2233B image on the host:
+
+```sh
+scripts/fm11/make-hdd-image.sh m2233b
+```
+
+Attach the image to the emulator as an M2233B drive and boot either a Level 1 or Level 2 system floppy. Initiali\
+ze the HDD from NitrOS-9:
+
+```text
+format /h0
+```
+
+To make a bootable HDD based on the currently running system configuration, use `cobbler`:
+
+```text
+cobbler /h0
+```
+
+To generate OS9Boot from an explicit boot list, use `os9gen`. For M2233B:
+
+```text
+os9gen /h0 < /DD/SYS/BOOTLISTS/bootlist.hd.m2233b
+```
+
+Change the model suffix for another supported HDD. `bootlist.hd` is the default M2233B profile.
+
+When using the HDD as a normal system disk, copy the required contents of `/DD/CMDS` and `/DD/SYS` from the syst\
+em floppy to the HDD as needed. `cobbler` and `os9gen` read IPL and Bootp1 data from `/DD/SYS/IPL` and `/DD/SYS/BOOT`.
+
+## `/DD/SYS` layout
+
+The FM-11 port uses the same `/DD/SYS` layout convention for Level 1 and Level 2.
 
 Typical layout:
 
 ```text
-/SYS/IPL/
+/DD/SYS/IPL/
     IPL.2D
     IPL.2HD
     IPL.HD
 
-/SYS/BOOT/
+/DD/SYS/BOOT/
     Bootp1.2D
     Bootp1.2HD
     Bootp1.HD
 
-/SYS/MODULES/
+/DD/SYS/MODULES/
     ... modules used to generate boot files ...
 
-/SYS/bootlist.2d
-/SYS/bootlist.2hd
+/DD/SYS/BOOTLISTS/
+    bootlist.2d
+    bootlist.2hd
+    bootlist.hd
+    bootlist.hd.m2230b
+    ...
+    bootlist.hd.m2243b
 ```
 
 `cobbler` and `os9gen` read these files through `/DD/SYS`.
@@ -283,20 +351,7 @@ This preserves the normal NitrOS-9 Level 2 8 KiB memory-management model as far 
 
 ## Known notes
 
-- The current Level 2 default configuration targets floppy booting.
-- A size-sensitive issue has been observed in the Level 2 initial OS9Boot load path, so the default boot lists intentionally keep the resident module set compact.
-- When adding modules to a Level 2 boot list, keep the total OS9Boot size in mind.
 - Some FM-11 emulator versions differ in their HD63C09 instruction implementation. Use an emulator version with the required 6309 fixes when testing the 6309 build.
-
-## Versioning
-
-GitHub-based versioning of this FM-11 port begins with:
-
-```text
-fm11-v0.1
-```
-
-Earlier internal version and test numbers used during initial bring-up are development history and are not part of the Git tag versioning scheme.
 
 ## Upstream
 
