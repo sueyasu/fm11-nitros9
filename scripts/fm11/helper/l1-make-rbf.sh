@@ -29,9 +29,9 @@ case "$MODE" in
 esac
 
 # Commands that make the distribution usable even on the small 2D image.
-CORE_CMDS="shell dir list echo copy del makdir attr rename mdir free ident date procs tee minted mmutest mmutest2"
+CORE_CMDS="shell dir list echo copy del makdir attr rename mdir free ident date procs tee minted"
 # Other generic Level 1 commands currently built without FM-11-specific changes.
-EXTRA_CMDS="build cmp deiniz deldir devs dmode dump error help iniz link load merge prompt save setime sleep touch tsmon unlink verify dirsort pwd pxd printerr binex exbin disasm edit more contest ded dcheck dsave tmode backup format cobbler os9gen"
+EXTRA_CMDS="build cmp deiniz deldir devs dmode dump error help iniz link load merge prompt save setime sleep touch tsmon unlink verify dirsort pwd pxd printerr binex exbin disasm edit more ded dcheck dsave tmode backup format cobbler os9gen"
 ALL_CMDS="$CORE_CMDS $EXTRA_CMDS"
 
 # OS9Gen source modules installed under /SYS/MODULES.  Both logical-drive
