@@ -97,6 +97,12 @@ build_media() {
         touch tsmon verify dirsort binex exbin disasm edit more dcheck backup \
         pwd pxd minted ded dmem mfree mmap pmap proc format cobbler os9gen
 
+    # The standard SYS data comes from Level 1, but the message of the day
+    # should identify the actual system image.
+    sed 's/NitrOS-9 Level 1/NitrOS-9 Level 2/' \
+        "$sys_tmp/motd" > "$sys_tmp/motd.l2"
+    mv "$sys_tmp/motd.l2" "$sys_tmp/motd"
+
     for f in errmsg helpmsg password motd modem.conf; do
         os9 copy -o=0 "$sys_tmp/$f" "$RBF,SYS/$f"
     done
