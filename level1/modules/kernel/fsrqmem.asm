@@ -213,30 +213,6 @@ FSrqmemPgMrkrStrtn  lda       ,-y       ; get the page marker (starting at the e
                     lsrb                ; B = B / 16
                     lsrb                ; divide by 32 to obtain the ending 8KB block number
                     ldx       <D.SysPrc ; get the pointer to the system process descriptor
-**************************
-* The following code addresses a bug where the call into F$AllImg could fail if the number of blocks
-* in B was 2, thereby crossing an 8KB boundary. The specific case that surfaced this was early on
-* the kernel's bootstrap. A was 4 and B was 2, and the kernel had slots 0, 5, 6, and 7 assigned to
-* 8KB blocks. Because B was 2, F$AllImg was asked to allocate 8KB blocks for slots 4 and 5. Since
-* slot 5 was already holding an 8KB block, F$AllImg returned an error and this call failed, causing
-* the kernel to crash.
-* The following code checks the system's DAT image in the process descriptor to ensure that the
-* slots that it's asking to obtain 8KB blocks for are indeed available; if not, it decrements the
-* number of blocks to request in B.
-* Boisy - 10/27/23
-                    pshs      d,x       ; save registers
-                    leax      P$DATImg,x ; point into the DAT image of the process descriptor
-l@                  ldb       ,s        ; get the starting block
-                    decb                ; decrement it since we're adding the number next
-                    addb      1,s       ; add the number of blocks
-                    lslb                ; A = A * 2
-                    ldd       b,x       ; get the entry in the DAT image
-                    cmpd      #DAT.Free ; is it free?
-                    beq       ok@       ; branch if so
-                    dec       ,s        ; else decrement starting block
-                    bne       l@        ; and go try next
-ok@                 puls      d,x       ; recover registers
-**************************
                     lbsr      FAllimgTarget ; allocate an image with our start/end block numbers
                     bcs       FSrqmemExit ; branch if we couldn't do it
                     ldb       R$A,u     ; else get the number of requested pages
