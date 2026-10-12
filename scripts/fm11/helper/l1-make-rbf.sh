@@ -129,6 +129,7 @@ install_os9gen_assets() {
     # the target of Cobbler/OS9Gen is another floppy.
     os9 makdir "$rbf,SYS/IPL"
     os9 makdir "$rbf,SYS/BOOT"
+    os9 makdir "$rbf,SYS/BOOTLISTS"
     os9 copy -o=0 "$OUT/IPL.2D"     "$rbf,SYS/IPL/IPL.2D"
     os9 copy -o=0 "$OUT/IPL.2HD"    "$rbf,SYS/IPL/IPL.2HD"
     os9 copy -o=0 "$OUT/IPL.HD"     "$rbf,SYS/IPL/IPL.HD"
@@ -146,44 +147,44 @@ install_os9gen_assets() {
     tr '\n' '\r' < "$ROOT/level1/fm11/bootlists/bootlist.2d" > "$bl2d"
     tr '\n' '\r' < "$ROOT/level1/fm11/bootlists/bootlist.2hd" > "$bl2hd"
     tr '\n' '\r' < "$ROOT/level1/fm11/bootlists/bootlist.hd" > "$blhd"
-    os9 copy -o=0 "$bl2d"  "$rbf,SYS/bootlist.2d"
-    os9 copy -o=0 "$bl2hd" "$rbf,SYS/bootlist.2hd"
-    os9 copy -o=0 "$blhd"  "$rbf,SYS/bootlist.hd"
+    os9 copy -o=0 "$bl2d"  "$rbf,SYS/BOOTLISTS/bootlist.2d"
+    os9 copy -o=0 "$bl2hd" "$rbf,SYS/BOOTLISTS/bootlist.2hd"
+    os9 copy -o=0 "$blhd"  "$rbf,SYS/BOOTLISTS/bootlist.hd"
     blx=$(mktemp "${TMPDIR:-/tmp}/fm11-bootlist-m2231b.XXXXXX")
     tr '\n' '\r' < "$ROOT/level1/fm11/bootlists/bootlist.hd.m2231b" > "$blx"
-    os9 copy -o=0 "$blx" "$rbf,SYS/bootlist.hd.m2231b"
+    os9 copy -o=0 "$blx" "$rbf,SYS/BOOTLISTS/bootlist.hd.m2231b"
     rm -f "$blx"
     blx=$(mktemp "${TMPDIR:-/tmp}/fm11-bootlist-m2230b.XXXXXX")
     tr '\n' '\r' < "$ROOT/level1/fm11/bootlists/bootlist.hd.m2230b" > "$blx"
-    os9 copy -o=0 "$blx" "$rbf,SYS/bootlist.hd.m2230b"
+    os9 copy -o=0 "$blx" "$rbf,SYS/BOOTLISTS/bootlist.hd.m2230b"
     rm -f "$blx"
     blx=$(mktemp "${TMPDIR:-/tmp}/fm11-bootlist-m2232b.XXXXXX")
     tr '\n' '\r' < "$ROOT/level1/fm11/bootlists/bootlist.hd.m2232b" > "$blx"
-    os9 copy -o=0 "$blx" "$rbf,SYS/bootlist.hd.m2232b"
+    os9 copy -o=0 "$blx" "$rbf,SYS/BOOTLISTS/bootlist.hd.m2232b"
     rm -f "$blx"
     blx=$(mktemp "${TMPDIR:-/tmp}/fm11-bootlist-m2233b.XXXXXX")
     tr '\n' '\r' < "$ROOT/level1/fm11/bootlists/bootlist.hd.m2233b" > "$blx"
-    os9 copy -o=0 "$blx" "$rbf,SYS/bootlist.hd.m2233b"
+    os9 copy -o=0 "$blx" "$rbf,SYS/BOOTLISTS/bootlist.hd.m2233b"
     rm -f "$blx"
     blx=$(mktemp "${TMPDIR:-/tmp}/fm11-bootlist-m2234b.XXXXXX")
     tr '\n' '\r' < "$ROOT/level1/fm11/bootlists/bootlist.hd.m2234b" > "$blx"
-    os9 copy -o=0 "$blx" "$rbf,SYS/bootlist.hd.m2234b"
+    os9 copy -o=0 "$blx" "$rbf,SYS/BOOTLISTS/bootlist.hd.m2234b"
     rm -f "$blx"
     blx=$(mktemp "${TMPDIR:-/tmp}/fm11-bootlist-m2235b.XXXXXX")
     tr '\n' '\r' < "$ROOT/level1/fm11/bootlists/bootlist.hd.m2235b" > "$blx"
-    os9 copy -o=0 "$blx" "$rbf,SYS/bootlist.hd.m2235b"
+    os9 copy -o=0 "$blx" "$rbf,SYS/BOOTLISTS/bootlist.hd.m2235b"
     rm -f "$blx"
     blx=$(mktemp "${TMPDIR:-/tmp}/fm11-bootlist-m2241b.XXXXXX")
     tr '\n' '\r' < "$ROOT/level1/fm11/bootlists/bootlist.hd.m2241b" > "$blx"
-    os9 copy -o=0 "$blx" "$rbf,SYS/bootlist.hd.m2241b"
+    os9 copy -o=0 "$blx" "$rbf,SYS/BOOTLISTS/bootlist.hd.m2241b"
     rm -f "$blx"
     blx=$(mktemp "${TMPDIR:-/tmp}/fm11-bootlist-m2242b.XXXXXX")
     tr '\n' '\r' < "$ROOT/level1/fm11/bootlists/bootlist.hd.m2242b" > "$blx"
-    os9 copy -o=0 "$blx" "$rbf,SYS/bootlist.hd.m2242b"
+    os9 copy -o=0 "$blx" "$rbf,SYS/BOOTLISTS/bootlist.hd.m2242b"
     rm -f "$blx"
     blx=$(mktemp "${TMPDIR:-/tmp}/fm11-bootlist-m2243b.XXXXXX")
     tr '\n' '\r' < "$ROOT/level1/fm11/bootlists/bootlist.hd.m2243b" > "$blx"
-    os9 copy -o=0 "$blx" "$rbf,SYS/bootlist.hd.m2243b"
+    os9 copy -o=0 "$blx" "$rbf,SYS/BOOTLISTS/bootlist.hd.m2243b"
     rm -f "$blx"
     rm -f "$bl2d" "$bl2hd" "$blhd"
     trap - EXIT HUP INT TERM

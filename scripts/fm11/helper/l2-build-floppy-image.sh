@@ -82,6 +82,7 @@ build_media() {
     # resident in the default OS9Boot; the others are alternate source modules.
     os9 makdir "$RBF,SYS"
     os9 makdir "$RBF,SYS/MODULES"
+    os9 makdir "$RBF,SYS/BOOTLISTS"
 
     # OS9Gen reads its boot modules as files.  Install the union of the 2D
     # and 2HD bootlists, then generate CR-terminated target lists using /DD
@@ -100,7 +101,7 @@ build_media() {
         bltmp=$(mktemp "${TMPDIR:-/tmp}/fm11-l2-bootlist.XXXXXX")
         awk '!/^#/ && NF { printf "/DD/SYS/MODULES/%s\r", $0 }' \
             "$FM/bootlists/$list" > "$bltmp"
-        os9 copy -o=0 "$bltmp" "$RBF,SYS/$list"
+        os9 copy -o=0 "$bltmp" "$RBF,SYS/BOOTLISTS/$list"
         rm -f "$bltmp"
     done
 
