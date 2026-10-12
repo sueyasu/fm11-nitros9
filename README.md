@@ -208,8 +208,7 @@ Level 1 / Level 2とも、システムプロファイルに応じて論理名 `/
 
 ## HDD構成と利用方法
 
-HDDのデバイス名はLevel 1 / Level 2とも `/H0` です。FM-11エミュレータで現在サポートしているHDD機種に合わせてdescr\
-iptorとbootlistを用意しています。
+HDDのデバイス名はLevel 1 / Level 2とも `/H0` です。FM-11エミュレータで現在サポートしているHDD機種に合わせてdescriptorとbootlistを用意しています。
 
 対応機種:
 
@@ -253,8 +252,7 @@ os9gen /h0 < /DD/SYS/BOOTLISTS/bootlist.hd.m2233b
 
 ほかのHDD機種では末尾の機種名を変更します。`bootlist.hd` は既定のM2233B profileです。
 
-HDDを通常のシステムディスクとして利用する場合は、必要に応じてシステムFDDの `/DD/CMDS` や `/DD/SYS` の内容をHDD側\
-にコピーしてください。IPLとBootp1は `cobbler` / `os9gen` が `/DD/SYS/IPL` と `/DD/SYS/BOOT` から読み込みます。
+HDDを通常のシステムディスクとして利用する場合は、必要に応じてシステムFDDの `/DD/CMDS` や `/DD/SYS` の内容をHDD側にコピーしてください。IPLとBootp1は `cobbler` / `os9gen` が `/DD/SYS/IPL` と `/DD/SYS/BOOT` から読み込みます。
 
 
 ## `/DD/SYS` の構成
@@ -346,7 +344,7 @@ OS-9 block 2 -> FM-11 MMR slot 4,5
 OS-9 block 7 -> FM-11 MMR slot E,F
 ```
 
-これにより、NitrOS-9 Level 2本来の8 KiBメモリ管理をできるだけ維持しつつ、FM-11のMMRへ対応しています。
+これにより、NitrOS-9 Level 2本来の8 KiBメモリ管理をできるだけ維持しつつ、FM-11のMMRに対応しています。
 
 ## 既知の注意点
 
