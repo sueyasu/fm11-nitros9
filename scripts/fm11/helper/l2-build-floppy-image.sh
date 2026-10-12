@@ -114,6 +114,9 @@ build_cpu() {
     # FM-11 Cobbler has explicit Level 1/Level 2 paths in the shared source.
     build "$ROOT/level1/fm11/cmds/cobbler.asm"      cobbler
 
+    # FM-11 OS9Gen shares its Level-aware source with Level 1.
+    build "$ROOT/level1/fm11/cmds/os9gen.asm"       os9gen
+
     # pd.asm is the common source for Pwd and Pxd.
     build "$ROOT/level1/cmds/pd.asm"               pwd -DPWD=1
     build "$ROOT/level1/cmds/pd.asm"               pxd -DPXD=1
@@ -188,7 +191,7 @@ build_media() {
         more:More dcheck:DCheck backup:Backup pwd:Pwd pxd:Pxd \
         minted:MinTED ded:dEd \
         dmem:DMem mfree:MFree mmap:MMap pmap:PMap proc:Proc \
-        format:Format cobbler:Cobbler
+        format:Format cobbler:Cobbler os9gen:OS9Gen
     do
         src=${item%%:*}
         dst=${item#*:}
@@ -200,6 +203,23 @@ build_media() {
     # resident in the default OS9Boot; the others are alternate source modules.
     os9 makdir "$RBF,SYS"
     os9 makdir "$RBF,SYS/MODULES"
+
+    # OS9Gen reads its boot modules as files.  Install the union of the 2D
+    # and 2HD bootlists, then generate CR-terminated target lists using /DD
+    # so the source remains the currently booted system disk.
+    for module in $(awk '!/^#/ && NF && !seen[$0]++ { print $0 }' \
+        "$FM/bootlists/bootlist.2d" "$FM/bootlists/bootlist.2hd")
+    do
+        os9 copy -o=0 "$OUT/$module" "$RBF,SYS/MODULES/$module"
+    done
+    for media in 2d 2hd; do
+        bltmp=$(mktemp "${TMPDIR:-/tmp}/fm11-l2-bootlist.XXXXXX")
+        awk '!/^#/ && NF { printf "/DD/SYS/MODULES/%s\r", $0 }' \
+            "$FM/bootlists/bootlist.$media" > "$bltmp"
+        os9 copy -o=0 "$bltmp" "$RBF,SYS/bootlist.$media"
+        rm -f "$bltmp"
+    done
+
     for module in llfm11hd \
         h0_m2230b_fm11 h0_m2231b_fm11 h0_m2232b_fm11 \
         h0_m2233b_fm11 h0_m2234b_fm11 h0_m2235b_fm11 \

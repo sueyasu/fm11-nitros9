@@ -838,7 +838,11 @@ FMWBHD              leax      >FMIPLHDName,pcr
                     os9       I$SetStt
                     lbcs      FMIPLBad
                     ldx       >fmbtptr,u
-                    ldy       #4352
+                    ifgt      Level-1
+                    ldy       #21*256
+                    else
+                    ldy       #17*256
+                    endc
                     lbsr      FMReadAsset
                     lbcs      FMAssetBad
                     lda       <devpath
@@ -857,7 +861,11 @@ FMWBIPL             ldy       #1024
                     os9       I$SetStt
                     lbcs      FMIPLBad
                     ldx       >fmbtptr,u
-                    ldy       #4352               17 physical 256-byte sectors
+                    ifgt      Level-1
+                    ldy       #21*256              Level 2 REL/Boot/Krn track
+                    else
+                    ldy       #17*256              Level 1 boot track
+                    endc
                     lbsr      FMReadAsset
                     lbcs      FMAssetBad
                     lda       <devpath
