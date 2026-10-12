@@ -59,7 +59,7 @@ make_image() {
 
     tmpd88="$d88.tmp.$$"
     rm -f "$tmpd88"
-    python3 "$DIR/make-d88.py" "$profile" "$rbftmp" "$ipl" "$bt" "$tmpd88"
+    python3 "$DIR/l1-make-d88.py" "$profile" "$rbftmp" "$ipl" "$bt" "$tmpd88"
     mv "$tmpd88" "$d88"
 
     rm -f "$rbftmp"

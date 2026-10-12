@@ -25,9 +25,8 @@ build_one() {
             usage
             ;;
     esac
-
-    "$DIR/l2-build-core.sh" "$CPU"
     OUT="$FM/build-core-$CPU"
+    [ -d "$OUT" ] || { echo "Missing $OUT; run l2-build-core.sh first" >&2; exit 1; }
 
     NOS9VER=${NOS9VER:-0}
     NOS9MAJ=${NOS9MAJ:-0}
@@ -46,6 +45,14 @@ build_one() {
 --includedir=$ROOT/level1/modules/kernel \
 -Dfm11=1 -DH6309=$H6309 \
 -DNOS9VER=$NOS9VER -DNOS9MAJ=$NOS9MAJ -DNOS9MIN=$NOS9MIN"
+
+    build() {
+        src=$1
+        dst=$2
+        shift 2
+        # shellcheck disable=SC2086
+        $ASBASE "$@" --format=os9 --output="$OUT/$dst" "$src"
+    }
 
     bin_to_fcb() {
         od -An -v -tx1 "$1" | awk '{
@@ -84,6 +91,57 @@ build_one() {
         bin=${spec#*:}
         bin_to_fcb "$OUT/$bin" "$OUT/cobbler-$tag.asm"
     done
+
+    # Runtime system modules and commands.  Keep all assembly here so the
+    # floppy-image stage only lays out already-built binaries.
+    build "$ROOT/level1/modules/ioman.asm"       ioman
+    build "$ROOT/level1/modules/rbsuper.asm"     rbsuper -Dwildbits=1 -DDrvCount=5
+    build "$ROOT/level1/modules/scf.asm"         scf
+    build "$ROOT/level2/modules/clock.asm"       clock
+    build "$ROOT/level1/modules/clock2_soft.asm" clock2_soft
+    build "$ROOT/level1/modules/sysgo.asm"       sysgo -DDD=1
+    build "$ROOT/level2/modules/rbf.asm"          rbf
+    build "$ROOT/level1/cmds/shell_21.asm"       shell
+    build "$ROOT/level1/cmds/dir.asm"            dir
+    build "$ROOT/level1/cmds/sleep.asm"          sleep
+    build "$ROOT/level2/cmds/procs.asm"          procs
+    build "$ROOT/level1/cmds/date.asm"           date
+    build "$ROOT/level1/cmds/xmode.asm"          tmode -DTMODE=1
+    build "$ROOT/level1/cmds/copy.asm"           copy
+    build "$ROOT/level1/cmds/dsave.asm"          dsave
+    build "$ROOT/level1/cmds/cmp.asm"            cmp
+    build "$ROOT/level1/cmds/load.asm"           load
+    build "$ROOT/level1/cmds/unlink.asm"         unlink
+    build "$ROOT/level1/cmds/makdir.asm"         makdir
+    build "$ROOT/level1/cmds/del.asm"            del
+    build "$ROOT/level1/cmds/attr.asm"           attr
+    build "$ROOT/level1/cmds/list.asm"           list
+    build "$ROOT/level1/cmds/free.asm"           free
+
+    for cmd in \
+        build deiniz deldir devs dmode dump echo ident iniz link \
+        mdir merge prompt rename save setime tee touch tsmon verify \
+        dirsort binex exbin disasm edit dcheck backup
+    do
+        build "$ROOT/level1/cmds/$cmd.asm" "$cmd"
+    done
+
+    build "$ROOT/level1/fm11/cmds/more.asm"        more
+    build "$ROOT/level1/fm11/cmds/minted.asm"      minted
+    build "$ROOT/level1/fm11/cmds/ded.asm"         ded
+
+    build "$ROOT/level2/cmds/dmem.asm"             dmem
+    build "$ROOT/level2/cmds/mdir.asm"             mdir
+    build "$ROOT/level2/cmds/mfree.asm"            mfree
+    build "$ROOT/level2/cmds/mmap.asm"             mmap
+    build "$ROOT/level2/cmds/pmap.asm"             pmap
+    build "$ROOT/level2/cmds/proc.asm"             proc
+
+    build "$ROOT/level1/fm11/cmds/format.asm"       format
+    build "$ROOT/level1/fm11/cmds/cobbler.asm"      cobbler
+    build "$ROOT/level1/fm11/cmds/os9gen.asm"       os9gen
+    build "$ROOT/level1/cmds/pd.asm"               pwd -DPWD=1
+    build "$ROOT/level1/cmds/pd.asm"               pxd -DPXD=1
 
     # Anonymous PipeMan used by the classic Shell pipeline operator (!).
     # This source contains Level 2 conditional code and is the appropriate

@@ -6,6 +6,8 @@ ROOT=$(CDPATH= cd -- "$DIR/../../.." && pwd)
 CPU=${1:-}; MEDIA=${2:-all}
 fm11_check_cpu "$CPU" || { echo "usage: $0 6809|6309 [2d|2hd|all]" >&2; exit 2; }
 fm11_check_media "$MEDIA" || { echo "usage: $0 6809|6309 [2d|2hd|all]" >&2; exit 2; }
+"$DIR/l2-build-core.sh" "$CPU"
+"$DIR/l2-build-runtime.sh" "$CPU"
 "$DIR/l2-build-floppy-image.sh" "$CPU" "$MEDIA"
 rename_one() {
     profile=$1

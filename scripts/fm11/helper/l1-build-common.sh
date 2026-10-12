@@ -4,6 +4,12 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 FM="$ROOT/level1/fm11"
 
+PHASE=${FM11_BUILD_PHASE:-all}
+case "$PHASE" in
+    core|runtime|all) ;;
+    *) echo "invalid FM11_BUILD_PHASE: $PHASE" >&2; exit 2 ;;
+esac
+
 CPU=${1:-}
 case "$CPU" in
     6809)
@@ -23,8 +29,12 @@ case "$CPU" in
 esac
 
 OUT="$FM/build-minimal-$CPU"
-rm -rf "$OUT"
-mkdir -p "$OUT"
+if [ "$PHASE" = core ] || [ "$PHASE" = all ]; then
+    rm -rf "$OUT"
+    mkdir -p "$OUT"
+else
+    [ -d "$OUT" ] || { echo "Missing $OUT; run l1-build-core.sh first" >&2; exit 1; }
+fi
 
 NOS9VER=${NOS9VER:-0}
 NOS9MAJ=${NOS9MAJ:-0}
@@ -43,6 +53,7 @@ build() {
     $AS_COMMON "$@" --output="$OUT/$dst" "$src"
 }
 
+if [ "$PHASE" != runtime ]; then
 # Build both ROM IPL variants.
 # Boot-ROM analysis: both profiles load exactly 512 bytes at $0400.
 #   2D:  T0/H0/S1-S2, 2 x 256-byte sectors.  The current disk layout keeps
@@ -98,6 +109,9 @@ bin_to_fcb() {
 }
 bin_to_fcb "$OUT/format-ipl-2d.bin"  "$OUT/format-ipl-2d.asm"
 bin_to_fcb "$OUT/format-ipl-2hd.bin" "$OUT/format-ipl-2hd.asm"
+fi
+
+if [ "$PHASE" != core ]; then
 
 # FDD-loaded OS9Boot with logical /D0-/D3 and physical /MD0,/MD1,/ND0,/ND1.
 # The ROM IPL loads boottrack.bin at $2600.  The Boot module then reads
@@ -151,6 +165,9 @@ build "$FM/modules/nd1_fm11.asm"              nd1_fm11
 build "$FM/modules/fm11clock.asm"             fm11clock
 build "$ROOT/level1/modules/clock2_soft.asm" clock2_soft
 build "$ROOT/level1/modules/sysgo.asm"       sysgo -DDD=1
+fi
+
+if [ "$PHASE" != runtime ]; then
 
 # Build both target-specific Bootp1 images.  Cobbler and OS9Gen load these
 # files from /DD/SYS/BOOT.  The active system disk therefore supplies the
@@ -190,6 +207,22 @@ cp "$OUT/format-ipl-2d.bin"  "$OUT/IPL.2D"
 cp "$OUT/format-ipl-2hd.bin" "$OUT/IPL.2HD"
 cp "$OUT/ipl-hd.bin" "$OUT/IPL.HD"
 truncate -s 512 "$OUT/IPL.HD"
+fi
+
+# Runtime still needs the binary-to-FCB converter for Cobbler descriptor data.
+bin_to_fcb() {
+    od -An -v -tx1 "$1" | awk '{
+        printf "                    fcb       "
+        for (i = 1; i <= NF; i++) {
+            printf "$%s", toupper($i)
+            if (i != NF)
+                printf ","
+        }
+        printf "\n"
+    }' > "$2"
+}
+
+if [ "$PHASE" != core ]; then
 
 # Cobbler still embeds only the five logical descriptors for each target
 # profile.  IPL and Bootp1 data are external files on /DD.
@@ -317,6 +350,7 @@ make_os9boot OS9Boot-2d d0_fm11 d1_fm11 d2_fm11 d3_fm11 dd_fm11
 make_os9boot OS9Boot-2hd d0_2hd_fm11 d1_2hd_fm11 d2_2hd_fm11 d3_2hd_fm11 dd_2hd_fm11
 # Compatibility name remains the 2D profile.
 cp "$OUT/OS9Boot-2d" "$OUT/OS9Boot"
+fi
 
 
 echo "2D IPL:         $OUT/ipl-2d.bin"
@@ -325,8 +359,10 @@ echo "2D Bootp1:      $OUT/Bootp1.2D"
 echo "2HD Bootp1:     $OUT/Bootp1.2HD"
 echo "HDD IPL:         $OUT/IPL.HD"
 echo "HDD Bootp1:      $OUT/Bootp1.HD"
+if [ "$PHASE" != core ]; then
 echo "2D OS9Boot:     $OUT/OS9Boot-2d  (/D0,/D1=MD0,MD1; /D2,/D3=ND0,ND1)"
 echo "2HD OS9Boot:    $OUT/OS9Boot-2hd (/D0,/D1=ND0,ND1; /D2,/D3=MD0,MD1)"
 echo "Physical names: /MD0 /MD1 = 5-inch 2D; /ND0 /ND1 = 5-inch 2HD"
 echo "FD commands built: Shell $BUILDABLE_CMDS pwd pxd"
+fi
 echo "CPU target:       $CPU_LABEL"
