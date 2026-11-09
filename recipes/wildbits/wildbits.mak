@@ -56,12 +56,15 @@ CLOCK = clock clock2_wildbits
 # NOTE!!!
 # VTIO must be near the top of the bootlist so that it can safely map
 # the text and CLUT blocks into $E000-$FFFF.
+# Level 2 always has the pipes (basic09-l2's editor and runtime talk over
+# them); a recipe that also lists them in BOOTMODS_EXTRA gets them once.
 ifeq ($(LEVEL),2)
 BOOTMODS = krnp2 ioman init \
 	$(SCF) \
 	$(RBF) \
 	$(CLOCK) \
-	$(BOOTMODS_EXTRA) \
+	$(PIPE) \
+	$(filter-out $(PIPE),$(BOOTMODS_EXTRA)) \
 	krn
 else
 BOOTMODS = krn krnp2 ioman init \
@@ -86,9 +89,11 @@ endif
 CMDS += $(STDCMDS) shell \
 	bootos9 scfg wbinfo wbreset modem \
 inetd telnet dw httpd $(BASIC09) $(BF) \
-	$(CMDS_EXTRA) wildspeed wmset
+	$(CMDS_EXTRA) wildspeed wmset wizupdate
 
-# K2 supervisor mailbox: shared Level 1 sources for both OS levels (rc18+).
+# K2 supervisor mailbox: shared Level 1 sources (rc18+). RPDrv + rp are in every K2 bootfile: the FEU's
+# (recipes/wildbits/feu/makefile) and, through SCF_EXTRA, the Level 1 and Level 2 disks' (2026-10-10, Roger:
+# "rpdrv and rp needs to be in both l1 and l2 bootfiles"; l2win's L2BOOT_EXTRA filters out the duplicate).
 ifeq ($(PLATFORM),k2)
 SCF_EXTRA += rpdrv rp
 CMDS += fpga
@@ -146,7 +151,7 @@ CMDS += dmem minted mmap modpatch \
 	lutrd black hexed pixview iss
 # grfdrv256 is loaded by the Level 2 vtio; vtm manages the virtual terminals;
 # assetload loads files into RAM blocks
-CMDS += grfdrv256 vtm assetload
+CMDS += grfdrv256 vtm assetload msspeed
 endif
 # sprites moved OUT of CMDS 2026-09-09 (user): it is a hardware probe, so it
 # lives in TESTS_BIN below and reaches the disk as TESTS/sprites only. Its
@@ -157,6 +162,19 @@ BASIC09_FILES = $(wildcard $(LANGUAGES)/basic09/samples/*)
 BASIC09_BIN = $(LANGUAGES)/basic09/basic09_wildbits
 RUNB_BIN = $(LANGUAGES)/basic09/runb_6809
 RUNB_SHA256 = 20ff5a997ec0e55f6aec1e37d92be49062d6c35a66e4b5404d9e680fc0783bbb
+ifeq ($(LEVEL),2)
+# basic09-l2 (nitros9-languages wildbits/basic09-l2): the editor, its runtime,
+# compiler and overlay, the help browser and farmem; the help file goes in SYS
+# and the examples in BASIC09. Its runb-l2 runs every module stock RunB runs,
+# plus FAR arrays, so it is the Level 2 runb.
+BASIC09_L2_DIR = $(LANGUAGES)/wildbits/basic09-l2
+BASIC09_L2 = basic09-l2 l2b09run l2b09cc l2b09ovl l2b09help farmem
+BASIC09_L2_HLP = $(BASIC09_L2_DIR)/basic09-l2.hlp
+BASIC09_L2_FILES = $(wildcard $(BASIC09_L2_DIR)/examples/*.b09)
+CMDS += $(BASIC09_L2)
+RUNB_BIN = $(BASIC09_L2_DIR)/runb-l2
+RUNB_SHA256 = 6924770005ae92c24a27602d1e3cf146c94b2a3d4c98b7c2e1e8225e4db33d40
+endif
 STARTUP = $(LEVEL2)/wildbits/startup
 WIZFITOOL = $(LEVEL2)/wildbits/cmds/wizfitool.b09
 FEU_STARTUP = feu.startup
@@ -173,9 +191,13 @@ TESTS = $(notdir $(filter-out %.asm,$(wildcard $(TESTS_DIR)/*)))
 # Executable hardware probes. Their sources are the .asm files in TESTS_DIR that
 # the TESTS line above filters out; each is assembled into MODDIR by its own rule
 # further down, then copied binary into TESTS on the disk with the execute
-# attribute set. They go NOWHERE else - none of these five is in CMDS.
+# attribute set. They go NOWHERE else - none of these is in CMDS.
 # Run them as tests/<name>, or chx the execution directory to the folder first.
-TESTS_BIN = sprites math fpu dma memtest
+TESTS_BIN = sprites math fpu dma
+ifeq ($(LEVEL),2)
+# memtest uses the Level 2 block calls (F$MapBlk, F$ClrBlk, F$GBlkMp).
+TESTS_BIN += memtest
+endif
 FONT_DIR = $(LEVEL1)/wildbits/sys/fonts
 BACKGROUND_DIR = $(LEVEL1)/wildbits/sys/backgrounds
 FONTS = 800yfont anglefont applefont bannerfont.sb bigbluefont boldfont boxedfont \
@@ -233,18 +255,21 @@ wildbits-sys-assets:
 	$(MAKE) -C $(BACKGROUND_DIR) -f $(NITROS9DIR)/recipes/support/wildbits-backgrounds.mak
 
 $(FEU_STARTUP): FORCE
-	echo "bootos9 /s0/OS9Boot" >> $@
+	echo "bootos9 /s0/OS9Boot" > $@
 
 FORCE: ;
 
-# Level 2 bootfile must not exceed 32,256 bytes ($7E00), which is the
-# available window from $8000 to $FDFF (below $FE00 hardware I/O). Exceeding
-# 32,256 bytes causes the bootfile to spill into physical Block 3, corrupting
-# DAT slot mappings during early kernel initialization.
-MAX_BOOTFILE_SIZE = 32256
+# Level 2 bootfile must not exceed 40,448 bytes ($9E00): the loaders place it
+# to end at $FDFF (below $FE00 hardware I/O), and starting below $6000 would
+# reach slot 2, the drivers' reserved map window. Bootfiles over 32,768 bytes
+# need the unsigned copy loop in bootos9 and the FEU os9boot (2026-10-04); an
+# older FEU in flash stops after the first sector.
+MAX_BOOTFILE_SIZE = 40448
 
+# smartpad256 pads at the beginning to whole pages, like padup256, and past
+# the page counts Krn maps one block too low (31-32, 63-64, 95-96, 127-128).
 ifeq ($(LEVEL),2)
-  PADUP ?= ./padup256 bootfile
+  PADUP ?= sh ../smartpad256 bootfile
 endif
 bootfile: $(addprefix $(MODDIR)/,$(BOOTMODS))
 	$(MERGE) $(addprefix $(MODDIR)/,$(BOOTMODS))>$@
@@ -252,14 +277,14 @@ bootfile: $(addprefix $(MODDIR)/,$(BOOTMODS))
 ifeq ($(LEVEL),2)
 	@size=$$(wc -c < $@ | tr -d ' '); \
 	if [ "$$size" -gt $(MAX_BOOTFILE_SIZE) ]; then \
-		echo "Error: $@ size ($$size bytes) exceeds the 32,256 byte threshold by $$((size - $(MAX_BOOTFILE_SIZE))) bytes!" >&2; \
-		echo "Level 2 bootfile must be <= 32,256 bytes (\$$7E00) to avoid DAT slot mapping corruption during early kernel initialization." >&2; \
+		echo "Error: $@ size ($$size bytes) exceeds the $(MAX_BOOTFILE_SIZE) byte limit by $$((size - $(MAX_BOOTFILE_SIZE))) bytes!" >&2; \
+		echo "Level 2 bootfile must be <= $(MAX_BOOTFILE_SIZE) bytes (see MAX_BOOTFILE_SIZE in wildbits.mak)." >&2; \
 		exit 1; \
 	fi
 endif
 
 ifeq ($(LEVEL),2)
-$(DSKIMAGE): bootfile $(MODDIR)/sysgo $(addprefix $(MODDIR)/,$(CMDS)) $(addprefix $(MODDIR)/,$(TESTS_BIN)) $(STARTUP) $(FEU_STARTUP) wildbits-sys-assets $(RECIPE_DEPS) $(WIZFITOOL)
+$(DSKIMAGE): bootfile $(MODDIR)/sysgo $(addprefix $(MODDIR)/,$(CMDS)) $(addprefix $(MODDIR)/,$(TESTS_BIN)) $(STARTUP) $(FEU_STARTUP) wildbits-sys-assets $(RECIPE_DEPS) $(WIZFITOOL) $(BASIC09_L2_HLP)
 else
 $(DSKIMAGE): bootfile $(addprefix $(MODDIR)/,$(CMDS)) $(addprefix $(MODDIR)/,$(TESTS_BIN)) $(STARTUP) $(FEU_STARTUP) wildbits-sys-assets $(RECIPE_DEPS)
 endif
@@ -281,6 +306,7 @@ endif
 ifeq ($(LEVEL),2)
 	$(CPL) $(WIZFITOOL) $@,CMDS/wizfitool.b09
 	$(OS9ATTR_TEXT) $@,CMDS/wizfitool.b09
+	$(OS9COPY) $(BASIC09_L2_HLP) $@,SYS
 endif
 	$(CPL) $(SYS_TEXT_FILES) $@,SYS
 	$(OS9ATTR_TEXT) $(foreach file,$(notdir $(SYS_TEXT_FILES)),$@,SYS/$(file))
@@ -296,6 +322,9 @@ endif
 	$(OS9ATTR_TEXT) $@,startup
 	$(MAKDIR) $@,BASIC09
 	$(CPL) $(BASIC09_FILES) $@,BASIC09
+ifeq ($(LEVEL),2)
+	$(CPL) $(BASIC09_L2_FILES) $@,BASIC09
+endif
 	$(MAKDIR) $@,SCRIPTS
 	$(foreach file,$(SCRIPTS),$(CPL) $(SCRIPTS_DIR)/$(file) $@,SCRIPTS;)
 	$(MAKDIR) $@,TESTS
@@ -329,7 +358,7 @@ ifeq ($(LEVEL),2)
 # The Level 2 terminal modules are laid out by defs/wildbits_vtio.d and
 # defs/wildbits.d, and no generic rule makes a module depend on a defs file,
 # so without this an edit there silently leaves a stale module behind.
-$(MODDIR)/vtio $(MODDIR)/grfdrv256 $(MODDIR)/vtm $(MODDIR)/term $(MODDIR)/$(KEYSUB): $(DEFSDIR)/wildbits_vtio.d $(DEFSDIR)/wildbits.d
+$(MODDIR)/vtio $(MODDIR)/grfdrv256 $(MODDIR)/vtm $(MODDIR)/msspeed $(MODDIR)/term $(MODDIR)/$(KEYSUB): $(DEFSDIR)/wildbits_vtio.d $(DEFSDIR)/wildbits.d
 endif
 
 $(MODDIR)/sprtest2: $(LEVEL1)/wildbits/cmds/sprtest2.asm | $(MODDIR)
@@ -377,7 +406,15 @@ $(MODDIR)/runb: $(RUNB_BIN) | $(MODDIR)
 	@printf '%s  %s\n' "$(RUNB_SHA256)" $@ | shasum -a 256 -c -
 
 $(RUNB_BIN):
-	$(MAKE) -C $(LANGUAGES)/basic09 runb_6809
+	$(MAKE) -C $(dir $@) $(notdir $@)
+
+ifeq ($(LEVEL),2)
+$(addprefix $(MODDIR)/,$(BASIC09_L2)): $(MODDIR)/%: $(BASIC09_L2_DIR)/% | $(MODDIR)
+	$(CP) $< $@
+
+$(addprefix $(BASIC09_L2_DIR)/,$(BASIC09_L2)) $(BASIC09_L2_HLP):
+	$(MAKE) -C $(BASIC09_L2_DIR) $(notdir $@)
+endif
 
 ifeq ($(LEVEL),2)
 $(MODDIR)/utilpak1: $(addprefix $(MODDIR)/,$(UTILPAK1_MODS)) | $(MODDIR)
@@ -555,4 +592,4 @@ clean:
 	$(RM) *.list *.map bootfile *.dsk buildinfo feu.startup $(CLEAN_EXTRA)
 	-rm -rf $(OBJDIR) $(LIBDIR) $(MODDIR) $(CLEAN_DIRS)
 
-.PHONY: all clean libs
+.PHONY: all clean libs FORCE

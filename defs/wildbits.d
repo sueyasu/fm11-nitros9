@@ -48,6 +48,16 @@ WILDBITS.D              set       1
 *
 TkPerSec            set       60
 
+********************************************************************
+* Boot features used by the shared kernel.  The loader (bootos9, run by
+* FEU) preloads the whole bootfile, krn included, and passes its start
+* in X and its size in Y; the kernel adopts it in place, so there is no
+* boot module and no F$Boot.
+*
+BtPreld             set       1         the loader preloads the bootfile
+Bt.End              set       $FE00     the bootfile ends here, below I/O
+RAMBlks             set       $40       fixed RAM: 512K in 8K blocks
+
                     ifeq      Level-1
 
 ********************************************************************
@@ -120,6 +130,9 @@ HW.Page             set       $7                  device descriptor hardware pag
 * $FFFF but $FD00-$FFFF is unusable by the user process.
 KrnBlk              set       $7
 
+* Start of protected upper memory (fixed shadow RAM, followed by I/O).
+UserMemLimit        equ       $FD00
+
                     endc
 
 ********************************************************************
@@ -133,6 +146,13 @@ SS.SOLIRQ           rmb       1
 SS.SOLMUTE          rmb       1
 SS.TermSel          rmb       1                   $C5 R$X = terminal id: show it (vtio/grfdrv)
 SS.LiveKeys         equ       $C6                 GetStat: R$A = live key sense bits, R$X/R$Y/R$U = keys held now; empties the input buffer
+SS.MsCfg            equ       $C7                 Get/SetStat: R$X = this terminal's mouse configuration bits (MC.*)
+MC.On               equ       %00000001           pointer always on (no auto-hide) while this terminal is live; 0 = auto-hide
+MC.Off              equ       %00000010           pointer always off while this terminal is live (MC.On+MC.Off = E$IllArg)
+* SS.MsCfg R$X high byte = the mouse speed, for the whole machine: 0 = leave it (R$X low byte = MC.* as above),
+* 1-8 = set it (the low byte is then ignored).  GetStat: high byte = the speed, 0 = no mouse.
+MS.SpdMax           equ       8                   1-8: resolution 1,1,2,2,4,4,8,8 counts/mm, even = 2:1 scaling (acceleration)
+MS.SpdDef           equ       5                   what mousedrv sets at boot: 4 counts/mm, 1:1
 * SS.Joy ($13) modes, in R$X on entry (joust docs/grfdrv256-api.md)
 JOY.Stick0          equ       0                   stick 0, compatibility: R$X/R$Y = 0/128/255, R$A = buttons
 JOY.Stick1          equ       1                   stick 1, compatibility
@@ -243,9 +263,12 @@ SS.BmBlk            equ       $E4                 GetStat: bitmap first block an
 SS.BmClear          equ       $E5                 R$Y = bitmap #, R$X low = fill value; GetStat: R$X = 1 while a fill is outstanding
 SS.BmDef            equ       $E6                 R$Y = mode/bitmap #, R$X = block (0 = clear), R$U = offset
 SS.BmLine           equ       $E7                 R$Y = bitmap #, R$X = 8-byte records, R$U = count in / drawn out; GetStat: R$X = pixels queued
+SS.MsWheel          equ       $E8                 GetStat: R$X = wheel steps since the last call, signed (0 without a wheel mouse)
+SS.MsPtr            equ       $E9                 SetStat: R$Y = 1: R$X = this terminal's 16x16 pointer image, 256 bytes; R$Y = 0: the default arrow
 SS.BmKill           equ       $EA                 R$Y = bitmap #: undefine, and free if the driver allocated
 SS.BmCfg            equ       $ED                 R$Y = bitmap #, R$X = enable/CLUT, R$U = HIRES4/GROUP
-* $E8, $E9, $EB and $EC are free (user, 2026-09-20).  They were SS.BmOn,
+* $EB and $EC are free (user, 2026-09-20; $E8 is SS.MsWheel since
+* 2026-10-17, $E9 SS.MsPtr since 2026-11-01).  They were SS.BmOn,
 * SS.BmOff, SS.BmLoad and SS.BmSave, and none ever had a handler.  On and
 * Off are two fields of SS.BmCfg, which can also leave every other field
 * alone, so a hide is one call and costs no more than a dedicated one would.
@@ -498,7 +521,7 @@ MS_YL               equ       $FEA5               mouse Y bits 7:0
 MS_PS2B0            equ       $FEA6               mouse PS/2 Byte 0
 MS_PS2B1            equ       $FEA7               mouse PS/2 Byte 1
 MS_PS2B2            equ       $FEA8               mouse PS/2 Byte 2
-MS_SRATE            equ       $28                 mouse sample rate $A,$14,$28,$3C,$50,$64,$C8
+MS_SRATE            equ       $64                 mouse sample rate $A,$14,$28,$3C,$50,$64,$C8 (100/s, as on a PC; was 40)
 
 ********************************************************************
 * K2 optical keyboard definitions
@@ -1316,21 +1339,46 @@ SPIF_DATA           rmb       1                   read FIFO data port (read only
 * there are four counter pairs below - four counters, not four FIFOs.  Bytes
 * waiting in a FIFO = its WR count - its RD count.  Counts are 11 bits, so
 * only bits 10:8 of each high byte are valid.
-* Wifi_Control_Register:
-* Bit[0]: 0 = 115,200 baud; 1 = 921,600 baud (both directions).
-* Bit[1] = 0 Default, 1 = Reset FIFO (you need to bring it back to 0) This is directly connected to reset line of the FIFO
-* Bit[2] = RX FIFO Empty ( 1 = Empty, 0 = Data Available)  read only
-* Bit[3] = TX FIFO Empty ( 1 = Empty, 0 = Data Available)  read only
-* Unlike the MIDI port, all four bits work on every shipping core, and both
-* directions raise interrupts: INT_WIZFI_RX (group 3, bit 0) when the Rx FIFO
+* Wifi_Control_Register (2026-10-06 cores; the rc22-and-earlier layout was bit 0 speed, bit 1 reset,
+* bits 2-3 status):
+* Bit[4:0] = rate code 0-16: the WizFi360's (W600's) ACTUAL rates, 40 MHz / floor(40,000,000 / requested);
+*            reset value 10 = 115,200, the module's factory default. Codes 17-31 run as 10.
+* Bit[5]   = 0, reserved (2026-10-07: the FIFO reset moved to the reset register)
+* Bit[6]   = RX FIFO Empty ( 1 = Empty, 0 = Data Available)  read only
+* Bit[7]   = TX FIFO Empty ( 1 = Empty, 0 = Data Available)  read only
+* Only a write to offset 0 changes the register.
+* Wifi_Reset_Register (offset 1, 2026-10-07 cores; reset value $80). Each bit holds its reset for as long as
+* it is set; write it back to 0 to release. Bit 7 reads 1 (older cores read $55 = data at offset 1).
+* Both directions raise interrupts: INT_WIZFI_RX (group 3, bit 0) when the Rx FIFO
 * goes non-empty, INT_WIZFI_TX (group 3, bit 5) when the Tx FIFO drains empty.
 WizFi.Base          equ       $FF20
-WizFi.TxEmpty       equ       %00001000           Tx FIFO empty (read only)
-WizFi.RxEmpty       equ       %00000100           Rx FIFO empty (read only)
-WizFi.Reset         equ       %00000010           FIFO reset, active high - clears both FIFOs and both serial ends
-WizFi.Rate          equ       %00000001           0 = 115,200 baud, 1 = 921,600 baud
+WizFi.TxEmpty       equ       %10000000           Tx FIFO empty (read only)
+WizFi.RxEmpty       equ       %01000000           Rx FIFO empty (read only)
+WizFi.RateMask      equ       %00011111           rate code (names below: requested rate; the core runs the W600's actual one)
+WizFi.Baud600       equ       0                   600.006
+WizFi.Baud1200      equ       1                   1,200.01
+WizFi.Baud1800      equ       2                   1,800.02
+WizFi.Baud2400      equ       3                   2,400.1
+WizFi.Baud4800      equ       4                   4,800.2
+WizFi.Baud9600      equ       5                   9,601.5
+WizFi.Baud14400     equ       6                   14,404.0
+WizFi.Baud19200     equ       7                   19,203.1
+WizFi.Baud38400     equ       8                   38,424.6
+WizFi.Baud57600     equ       9                   57,636.9
+WizFi.Baud115200    equ       10                  115,273.8 (reset default)
+WizFi.Baud230400    equ       11                  231,213.9
+WizFi.Baud460800    equ       12                  465,116.3
+WizFi.Baud921600    equ       13                  930,232.6
+WizFi.Baud1000000   equ       14                  1,000,000
+WizFi.Baud1500000   equ       15                  1,538,461.5
+WizFi.Baud2000000   equ       16                  2,000,000
+WizFi.HasReset      equ       %10000000           reset register present (read only)
+WizFi.UartRst       equ       %00000100           hold the Tx and Rx serial ends in reset
+WizFi.FifoRst       equ       %00000010           hold the Tx and Rx FIFOs clear
+WizFi.ChipRst       equ       %00000001           hold the WizFi360 chip in reset
                     org       $0
-WizFi_CtrlReg       rmb       1                   control register (bits 2 and 3 read back as status)
+WizFi_CtrlReg       rmb       1                   control register (bits 7 and 6 read back as status)
+WizFi_ResetReg      rmb       1                   reset register (WizFi.ChipRst/FifoRst/UartRst, WizFi.HasReset)
 WizFi_DataReg       rmb       1                   Rx/Tx FIFO data port (read and write)
 WizFi_RxD_RD_Cnt    rmb       2                   RX occupancy, read clock domain; big-endian
 WizFi_RxD_WR_Cnt    rmb       2                   RX occupancy, write clock domain; big-endian

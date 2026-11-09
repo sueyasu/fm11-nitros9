@@ -549,6 +549,12 @@ PullCore            lbsr      SetBlkC2C3
                     ldd       #128
                     lbsr      CpyBlk
                   ENDC
+* The mouse pointer's image, every switch: each terminal's buffer has one
+* (GF.TermNew's arrow, or what SS.MsPtr loaded).
+                    ldu       #$6000+T.MSPTR
+                    ldy       #$2000+$0C00 ; vicky_BLK+$0C00
+                    ldd       #256
+                    lbsr      CpyBlk
 * The sprite registers are filled from this terminal's REGISTERED table,
 * not from a shadow - see SprRestore, called at the end of PullCore where
 * the 16K buffer is finished with and slots 3/4 are free.
@@ -813,6 +819,22 @@ GSFound             pshs      d         ; 0,s = new id, 1,s = new offset
                     lslb
                     ldx       #gr.TermTbl
                     abx                 ; x = old entry
+* Its pointer position and whether the pointer is showing, for a
+* background SS.Mouse and for putting back when it comes forward
+* (GSEnter).  Interrupts are masked: mousedrv cannot move or show the
+* pointer in between.
+                    ldy       #gr.MsTbl
+                    leay      b,y       ; y = its mouse row (b <= 64)
+                    ldd       MS_XH
+                    std       MT.LastX,y
+                    ldd       MS_YH
+                    std       MT.LastY,y
+                    lda       #MF.Saved
+                    ldb       MS_MEN
+                    bitb      #%00000001 ; pointer enable
+                    beq       mshid@
+                    ora       #MF.Shown
+mshid@              sta       MT.Flags,y
                     lda       T.Flags,x
                     anda      #^T.Live
                     sta       T.Flags,x
@@ -1006,6 +1028,34 @@ GTFBnx              leas      1,s       ; drop the size bit
 GSEnter             pshs      a
                     ldx       #gr.TermTbl
                     abx                 ; x = new entry
+* The pointer goes back where it was, shown or hidden, when this terminal
+* went background (GFSwitch saved both).  A terminal that has never been
+* background has nothing saved, and the pointer stays as it is.  mousedrv
+* reads the position back from the registers, so it carries on from there.
+* The auto-hide timer starts again, so a pointer that comes back showing
+* gets its full 4-5 s.
+                    pshs      b
+                    clr       >gr.MSTimer
+                    clr       >gr.MSWheel ; wheel steps made on the terminal we left are not this one's
+                    ldy       #gr.MsTbl
+                    leay      b,y       ; y = its mouse row (b <= 64)
+                    lda       MT.Flags,y
+                    bita      #MF.Saved
+                    beq       nomspos@
+                    ldd       MT.LastX,y
+                    std       MS_XH
+                    ldd       MT.LastY,y
+                    std       MS_YH
+                    clrb                ; hidden
+                    lda       MT.Cfg,y  ; set to always off (SS.MsCfg)?
+                    bita      #MC.Off
+                    bne       msen@     ; yes: it comes forward hidden
+                    lda       MT.Flags,y
+                    bita      #MF.Shown
+                    beq       msen@
+                    incb                ; shown, mode 0 (as mousedrv)
+msen@               stb       MS_MEN
+nomspos@            puls      b
                     lda       T.Flags,x
                     ora       #T.Live
                     sta       T.Flags,x
@@ -1034,13 +1084,25 @@ wsfg@               puls      b
                     puls      a
                     sta       >gr.LiveTerm
 * Clamp V.CurRow and resync V.CurPos (a DWSet can leave the row past the
-* window), then put the hardware cursor there.
+* window), then put the hardware cursor there, with this terminal's
+* enable, flash rate, character and colour.
                     lbsr      GSCalcPos
-                    ldx       #TXT.Base
+                    bsr       CrsrPut
                     lda       V.CurCol,u
                     sta       VKY_TXT_CURSOR_X_REG_L,x
                     lda       V.CurRow,u
                     sta       VKY_TXT_CURSOR_Y_REG_L,x
+                    rts
+* CrsrPut - program the text cursor's control, character and colour
+* ($FFD0/$FFD2/$FFD3) from terminal U's copy (05 20-05 24).
+* Exit: X = TXT.Base.  Clobbers A.
+CrsrPut             ldx       #TXT.Base
+                    lda       V.CrsrCtl,u
+                    sta       VKY_TXT_CURSOR_CTRL_REG,x
+                    lda       V.CrsrChr,u
+                    sta       VKY_TXT_CURSOR_CHAR_REG,x
+                    lda       V.CrsrCol,u
+                    sta       VKY_TXT_CURSOR_COLR_REG,x
                     rts
 * GSTermPtrs - vtio's SetTermGrfPtrs: aim gr.TermBlk/VStaStorU/VBlk/U5
 * at one terminal.  Entry X = its gr.TermTbl entry.  Clobbers D.
@@ -1331,6 +1393,8 @@ GetSttTbl           fcb       SS.ScSiz
                     fdb       GrfMod+GSJoy
                     fcb       SS.Mouse
                     fdb       GrfMod+GSMouse
+                    fcb       SS.MsWheel
+                    fdb       GrfMod+GSMsWheel
                     fcb       SS.DScrn
                     fdb       GrfMod+GSDScrn
                     fcb       SS.FntChar
@@ -1347,6 +1411,8 @@ GetSttTbl           fcb       SS.ScSiz
                     fdb       GrfMod+GSBmClear
                     fcb       SS.BmLine
                     fdb       GrfMod+GSBmLine
+                    fcb       SS.MsCfg
+                    fdb       GrfMod+GSMsCfg
                     fcb       0
 * The bitmap calls go first: StatDisp searches this table linearly, and a
 * game's set-up walks all of them.
@@ -1394,6 +1460,10 @@ SetSttTbl           fcb       SS.AScrn
                     fdb       GrfMod+SSTmScrl
                     fcb       SS.ClutWrite
                     fdb       GrfMod+SSClutWrite
+                    fcb       SS.MsCfg
+                    fdb       GrfMod+SSMsCfg
+                    fcb       SS.MsPtr
+                    fdb       GrfMod+SSMsPtr
                     fcb       0
 
 * GetStat SS.ScSiz - R$X = columns, R$Y = rows
@@ -1461,13 +1531,46 @@ GSDScrn             clra
                     std       R$Y,x
                     bra       StatOK
 
-* GetStat SS.Mouse - R$X/R$Y = position, R$A = buttons
-GSMouse             ldd       MS_XH
+* GetStat SS.Mouse - R$X/R$Y = position, R$A = buttons.  Live terminal:
+*   the pointer's position and mousedrv's buttons.  Not live: where the
+*   pointer was when it went background (its gr.MsTbl row, saved by
+*   GFSwitch) and no buttons, so a background program sees nothing the user
+*   does on another terminal.  Y is free: StatDisp dispatched here with
+*   jmp [,y].
+GSMouse             lbsr      MsRow     ; y = this terminal's gr.MsTbl row
+                    tst       V.TermLive,u
+                    beq       msbg@
+                    ldd       MS_XH
                     std       R$X,x
                     ldd       MS_YH
                     std       R$Y,x
-                    lda       V.MSButtons,u
+                    lda       >gr.MSButtons
                     bra       RetA
+msbg@               ldd       MT.LastX,y
+                    std       R$X,x
+                    ldd       MT.LastY,y
+                    std       R$Y,x
+                    clra                ; no buttons
+                    bra       RetA
+
+* GetStat SS.MsWheel - R$X = the wheel steps since the last call, signed (0
+*   without a wheel mouse).  Live terminal: mousedrv's count, read and
+*   cleared with interrupts masked.  Not live: 0.  Its own call, not a
+*   register of SS.Mouse: SS.Mouse's callers keep their own values in the
+*   registers it does not return (BASIC09's wild keeps its parameter pointer
+*   in U).
+GSMsWheel           clra
+                    clrb
+                    tst       V.TermLive,u
+                    beq       whbg@
+                    pshs      cc
+                    orcc      #IntMasks ; mousedrv adds to it from its interrupt
+                    ldb       >gr.MSWheel
+                    clr       >gr.MSWheel
+                    puls      cc
+                    sex
+whbg@               std       R$X,x
+                    lbra      StatOK
 
 * GetStat SS.Joy - R$X = the mode (JY.* modes, wildbits.d; spec in joust
 *   docs/grfdrv256-api.md).  Above 6: E$IllArg.
@@ -2916,11 +3019,13 @@ gco8@               leas      1,s       ; drop the size bit
 * are not guaranteed readable.  Every writer must keep the mirror in
 * step; every reader must use the mirror.  Later terminals inherit the
 * mirror from the live console in GF.TermNew.
-* Then the text cursor: enabled, flashing, '_' at 0,0.
+* Then the text cursor: enabled, flashing, '_' at 0,0, and the mouse
+* pointer's image (mousedrv used to draw it from the bootfile).
 *******************************************************************
 GFInitDisp          lbsr      SetBlkC2C3 ; u = this terminal's statics
                     leax      DispRegs,pcr
                     leay      V.V_MCR,u
+                    pshs      u
                     ldu       #TXT.Base
                     ldb       #16
 seed@               lda       ,x+
@@ -2928,15 +3033,19 @@ seed@               lda       ,x+
                     sta       ,u+       ; register
                     decb
                     bne       seed@
+                    puls      u
                     ldx       #TXT.Base
-                    lda       #Vky_Cursor_Enable|Vky_Cursor_Flash_Rate0|Vky_Cursor_Flash_Rate1
-                    sta       VKY_TXT_CURSOR_CTRL_REG,x
                     clra
                     clrb
                     std       VKY_TXT_CURSOR_Y_REG_H,x
                     std       VKY_TXT_CURSOR_X_REG_H,x
-                    lda       #'_
-                    sta       VKY_TXT_CURSOR_CHAR_REG,x
+* The cursor colour is the core's own, read once: it is every terminal's
+* default (GF.TermNew).  Then the copy GF.TermNew seeded goes to the
+* hardware: on, flashing, '_'.
+                    lda       VKY_TXT_CURSOR_COLR_REG,x
+                    sta       >gr.CrsrCol
+                    sta       V.CrsrCol,u
+                    lbsr      CrsrPut
 * Every sprite record off, once, so gr.SprDirty's "they are all clear" is
 * true from the start rather than a guess about what the core left behind.
                     lbsr      SprMapC0  ; vicky_BLK in slot 1
@@ -2944,8 +3053,49 @@ seed@               lda       ,x+
                     clrb
                     lbsr      SprClrFrom
                     clr       >gr.SprDirty
-                    clrb
+* The mouse pointer: 16x16 at VICKY_BLK+$0C00, from the arrow GF.TermNew
+* drew in this terminal's buffer (still in slots 3/4).  mousedrv found
+* the mouse before grfdrv was loaded but leaves it hidden until the image
+* is here; show it now if there is one.
+                    ldu       #$6000+T.MSPTR
+                    ldy       #$2000+$0C00 ; the pointer image, through slot 1
+                    ldd       #256
+                    lbsr      CpyBlk
+                    tst       >gr.MSFound
+                    beq       msx@
+                    lda       #$01      ; shown, mode 0 (as mousedrv)
+                    sta       MS_MEN
+msx@                clrb
                     jmp       >GrfMod+SysRet
+
+* MsPtrDraw - draw the default arrow at X: runs of colour,length ($00
+*   transparent, $01 black, $FF white), ended by 0,0.  256 bytes.
+*   Exit: X = past the image; D and Y changed.
+MsPtrDraw           leay      MsPtrData,pcr
+msrun@              ldd       ,y++      ; colour, length
+                    beq       msdone@
+msdot@              sta       ,x+
+                    decb
+                    bne       msdot@
+                    bra       msrun@
+msdone@             rts
+
+MsPtrData           fcb       255,2,0,14
+                    fcb       255,1,1,1,255,1,0,13
+                    fcb       255,1,1,2,255,1,0,12
+                    fcb       255,1,1,3,255,1,0,11
+                    fcb       255,1,1,4,255,1,0,10
+                    fcb       255,1,1,5,255,1,0,9
+                    fcb       255,1,1,6,255,1,0,8
+                    fcb       255,1,1,7,255,1,0,7
+                    fcb       255,1,1,8,255,1,0,6
+                    fcb       255,1,1,9,255,1,0,5
+                    fcb       255,1,1,10,255,1,0,4
+                    fcb       255,1,1,6,255,5,0,4
+                    fcb       255,1,1,3,255,1,1,3,255,1,0,7
+                    fcb       255,1,1,2,255,3,1,2,255,1,0,7
+                    fcb       255,1,1,1,255,4,1,2,255,1,0,7
+                    fcb       255,2,0,4,255,3,0,7,0,0
 
 * The 16 bytes of $FFC0-$FFCF, in register order: MASTER_CTRL_REG_L/H,
 * VKY_LAYER_CTRL_L/H, BORDER_CTRL_REG, BORDER_COLOR_B/G/R,
@@ -3003,6 +3153,17 @@ DispRegs            fcb       Mstr_Ctrl_Text_Mode_En,$00
 GFTermNew           lda       >gr.b1
                     cmpa      #G.TermMax
                     lbhs      TNBusy
+* A new terminal's mouse row starts at the defaults: an id is reused after
+* GF.TermGone, and its old SS.MsCfg owner may not have exited yet.
+                    ldb       #8
+                    mul                 ; d = id * 8
+                    ldy       #gr.MsTbl
+                    leay      d,y
+                    ldb       #8
+tnms@               clr       ,y+
+                    decb
+                    bne       tnms@
+                    lda       >gr.b1
                     ldb       #gr.TermSz
                     mul
                     ldx       #gr.TermTbl
@@ -3036,6 +3197,12 @@ GFTermNew           lda       >gr.b1
                     lbsr      SetBlkC2C3 ; u = the new statics, slots 3/4 = its buffer
                     ldb       T.Block,x
                     stb       V.TermBufBlk,u
+* Its mouse pointer starts as the arrow, in its buffer: every switch to it
+* programs the image from there (PullCore).
+                    pshs      x
+                    ldx       #$6000+T.MSPTR
+                    lbsr      MsPtrDraw
+                    puls      x
 * It has registered no sprite table.  A row is never inherited: it names
 * another process's memory.
                     lda       >gr.b1
@@ -3063,6 +3230,16 @@ GFTermNew           lda       >gr.b1
                     clr       V.LastCh,u
                     clr       V.Reverse,u
                     clr       V.ST,u
+* The text cursor starts on, flashing, '_', in the core's colour - not the
+* live terminal's, so a program that hid its cursor does not hide it on
+* terminals opened later.  (The first terminal's colour is read in
+* GF.InitDisp, after this.)
+                    lda       #Vky_Cursor_Enable|Vky_Cursor_Flash_Rate0|Vky_Cursor_Flash_Rate1
+                    sta       V.CrsrCtl,u
+                    lda       #'_
+                    sta       V.CrsrChr,u
+                    lda       >gr.CrsrCol
+                    sta       V.CrsrCol,u
 * The bitmap / CLUT-block / tile mirror starts "everything off" and is
 * never inherited: a new terminal has no bitmaps of its own, and pointing
 * it at another terminal's is the bug the mirror exists to prevent.
@@ -3619,6 +3796,154 @@ ok@                 clrb
 bad@                comb
                     ldb       #E$IllArg
                     jmp       >GrfMod+SysRet
+
+* GetStat SS.MsCfg - R$X = this terminal's mouse configuration (MC.* bits),
+*   high byte the mouse speed (1-8, 0 = no mouse).
+GSMsCfg             bsr       MsRow
+                    lda       >gr.MsSpeed
+                    ldb       MT.Cfg,y
+                    std       R$X,x
+                    clrb
+                    jmp       >GrfMod+SysRet
+
+* SetStat SS.MsCfg - R$X = this terminal's mouse configuration (MC.* bits):
+*   MC.On (1) = the pointer stays on while this terminal is live, MC.Off (2)
+*   = it stays off; 0 = the defaults (auto-hide after 4-5 s without
+*   movement).  Both bits, and bits not defined yet, are E$IllArg.  Kept
+*   in the terminal's gr.MsTbl row; vtio's AltISR acts on it, and puts the defaults back once the calling process (vtio's
+*   StatFwd hands it over in gr.b2) has exited, so a program that dies
+*   without setting 0 does not leave the pointer on.  The owner is stored
+*   before the bits and the bits cleared before the owner, so the AltISR
+*   never sees MC.On with no owner.
+SSMsCfg             bsr       MsRow
+                    ldd       R$X,x
+                    tsta
+                    bne       speed@    ; high byte: the mouse speed
+                    cmpb      #MC.Off   ; highest defined value (MC.On+MC.Off is not one)
+                    bhi       bad@
+                    tstb
+                    beq       def@
+                    lda       >gr.b2    ; the calling process
+                    sta       MT.CfgID,y
+                    stb       MT.Cfg,y
+                    bra       ok@
+def@                clr       MT.Cfg,y
+                    clr       MT.CfgID,y
+ok@                 clrb
+                    jmp       >GrfMod+SysRet
+bad@                comb
+                    ldb       #E$IllArg
+                    jmp       >GrfMod+SysRet
+* High byte 1-MS.SpdMax: the speed, for the whole machine and kept until it
+* is set again; the low byte is ignored, so setting the speed does not touch
+* this terminal's setting or its owner.
+speed@              cmpa      #MS.SpdMax
+                    bhi       bad@
+                    tst       >gr.MSFound
+                    beq       nomouse@
+                    bsr       MsSetSpd
+                    bcc       ok@
+nomouse@            comb
+                    ldb       #E$NotRdy
+                    jmp       >GrfMod+SysRet
+
+* MsRow - Y = this terminal's gr.MsTbl row (V.TermID * 8).  A, X, U kept.
+MsRow               ldb       V.TermID,u
+                    lslb
+                    lslb
+                    lslb
+                    ldy       #gr.MsTbl
+                    leay      b,y       ; b <= 64: positive as a signed offset
+                    rts
+
+* MsSetSpd - A = speed 1-8: resolution (A-1)/2 (1, 2, 4, 8 counts/mm), 2:1
+*   scaling when A is even.  The mouse's interrupt is masked so its $FA
+*   acknowledgements come here instead of to mousedrv; the stream is paused
+*   ($F5) and restarted ($F4), and the packet count reset so mousedrv starts
+*   on a whole packet.  Carry set = the mouse stopped answering (the stream
+*   is restarted anyway).  X and Y are kept.
+MsSetSpd            pshs      a,x,y
+                    ldx       #gr.MsDrv
+                    pshs      cc
+                    orcc      #IntMasks
+                    lda       INT_MASK_0
+                    ora       MD.IntBit,x
+                    sta       INT_MASK_0 ; read-modify-write: shared with SOF, SOL, the PS/2 keyboard
+                    puls      cc
+                    lda       MD.MCLR,x ; drop any packet bytes already waiting
+                    sta       PS2_CTRL
+                    clr       PS2_CTRL
+                    lda       #$F5      ; stop the stream
+                    bsr       MsCmd
+                    bcs       restart@
+                    lda       MD.MCLR,x ; and anything that came before the stop
+                    sta       PS2_CTRL
+                    clr       PS2_CTRL
+                    lda       #$E8      ; resolution
+                    bsr       MsCmd
+                    bcs       restart@
+                    lda       ,s
+                    deca
+                    lsra                ; 0-3
+                    bsr       MsCmd
+                    bcs       restart@
+                    lda       ,s
+                    anda      #1        ; odd: 1:1 ($E6), even: 2:1 ($E7)
+                    eora      #$E7
+                    bsr       MsCmd
+                    bcs       restart@
+                    lda       ,s
+                    sta       >gr.MsSpeed
+restart@            pshs      cc        ; the carry so far
+                    lda       #$F4      ; the stream on again
+                    bsr       MsCmd
+                    bcc       on@
+                    lda       #Carry    ; it did not answer: fail as well
+                    ora       ,s
+                    sta       ,s
+on@                 orcc      #IntMasks
+                    clr       MD.ByteCnt,x ; the next byte starts a packet
+                    lda       MD.IntBit,x
+                    sta       INT_PENDING_0 ; drop an edge latched meanwhile (write 1 to clear)
+                    coma
+                    anda      INT_MASK_0
+                    sta       INT_MASK_0 ; unmask the mouse again
+                    puls      cc        ; the interrupts as they were, and the carry
+                    puls      a,x,y,pc
+
+* MsCmd - send A to the mouse and wait for its $FA (3 tries).  X = gr.MsDrv.
+*   Carry set = no answer.  A and B clobbered.
+MsCmd               pshs      a
+                    ldb       #3
+mc1@                lda       ,s
+                    clr       PS2_CTRL
+                    sta       PS2_OUT
+                    lda       MD.M_WR,x
+                    sta       PS2_CTRL
+                    clr       PS2_CTRL
+                    bsr       MsRead
+                    bcs       mcx@
+                    cmpa      #$FA
+                    beq       mcx@      ; acknowledged (cmpa equal: carry clear)
+                    decb
+                    bne       mc1@
+                    orcc      #Carry
+mcx@                puls      a,pc
+
+* MsRead - A = the next byte from the mouse's channel; carry set if none
+*   came (about 0.1 s).  X = gr.MsDrv.
+MsRead              pshs      y
+                    ldy       #0        ; 65536 tries
+mr1@                lda       PS2_STAT
+                    anda      MD.MEMP,x ; set = the channel's FIFO is empty
+                    beq       mr2@
+                    leay      -1,y
+                    bne       mr1@
+                    orcc      #Carry
+                    puls      y,pc
+mr2@                lda       [MD.MS_IN,x]
+                    andcc     #^Carry
+                    puls      y,pc
 
 *******************************************************************
 * The sprite calls.  A program keeps the ONLY copy of its records and
@@ -4206,6 +4531,50 @@ ClutDone            leas      6,s
                     jmp       >GrfMod+SysRet
 ClutOff             leas      6,s
 ClutBad             comb
+                    ldb       #E$IllArg
+                    jmp       >GrfMod+SysRet
+
+*******************************************************************
+* SetStat SS.MsPtr - this terminal's mouse pointer image.
+*   R$Y = 1: R$X = 256 bytes, 16 rows of 16 pixels, each a graphics LUT0
+*                  index ($00 = transparent)
+*   R$Y = 0: the default arrow
+*   (Not R$X = 0 for the arrow: a Level 2 process's data starts at $0000.)
+* The image goes to T.MSPTR in the terminal's 16K switch buffer (slot 4),
+*   which PullBuf copies to VICKY_BLK+$0C00 on every switch, and from
+*   there to the pointer memory too when the terminal is live.  It stays
+*   until the terminal closes or the next SS.MsPtr.
+* Exit: B = 0, or carry + E$IllArg (R$Y not 0 or 1, or the 256 bytes run
+*   off the top of the caller's map).
+*******************************************************************
+SSMsPtr             ldd       R$Y,x
+                    cmpd      #1
+                    bhi       ill@
+                    lda       V.TermLive,u
+                    pshs      a
+                    tstb
+                    beq       dflt@
+                    ldd       R$X,x
+                    ldy       #256
+                    lbsr      MapCallBuf ; u = the image through slot 1
+                    bcs       bad@
+                    ldy       #$6000+T.MSPTR
+                    ldd       #256
+                    lbsr      CpyBlk
+                    bra       live@
+dflt@               ldx       #$6000+T.MSPTR
+                    lbsr      MsPtrDraw
+live@               tst       ,s+       ; live?
+                    beq       done@     ; no - PullBuf programs it on the switch
+                    lbsr      SprMapC0  ; vicky_BLK in slot 1
+                    ldu       #$6000+T.MSPTR
+                    ldy       #$2000+$0C00
+                    ldd       #256
+                    lbsr      CpyBlk
+done@               clrb
+                    jmp       >GrfMod+SysRet
+bad@                leas      1,s
+ill@                comb
                     ldb       #E$IllArg
                     jmp       >GrfMod+SysRet
 

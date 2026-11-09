@@ -80,7 +80,6 @@ msdrvmod            fcs       /mousedrv/             mouse driver module
 * VTIO Alternate IRQ routine - Entered from Clock every 1/60th of a second
 *
 * The interrupt service routine is responsible for:
-*   - handling the K keyboard (if available)
 *   - decrementing the tone counter
 *   - select the new active window if needed (when that time comes)
 *   - updating graphics cursors if needed (when that time comes)
@@ -88,22 +87,8 @@ msdrvmod            fcs       /mousedrv/             mouse driver module
 
 AltISR              
                     ldu       D.KbdSta
-* Handle keyboard (if available)
-                    ldx       V.KeyDrvEPtr,u
-                    cmpx      #$0000
-                    ifgt      Level-1
-                    beq       HandleMSTimer
-                    else
-                    beq       HandleSound
-                    endc
-                    lda       V.LastCh,u                 if LastCh=0, skip keyrepeat handling
-                    beq       HandleKeyboard@            
-                    dec       V.KRTimer,u                decrement repeat timer
-                    bne       HandleKeyboard@            if not 0, then don't repeat yet
-                    ldx       V.KeyDrvEPtr,u             
-                    jsr       9,x                        else jmp to keyrepeat routine
-HandleKeyboard@     ldx       V.KeyDrvEPtr,u                
-                    jsr       6,x                        call AltIRQ routine in keydrv
+* The keyboard is not handled here: keydrv services it from its own
+* interrupt and the core paces key repeat.
                     ifgt      Level-1
 * Handle Mouse Timer. When timer wraps to zero, turn it off
 * Clearing MS_MEN is a true hide on v8_rc11 and later cores (the pointer pixel
@@ -964,29 +949,22 @@ NoOp
 ;;;
 ;;; Moves the cursor to the left.
 ;;;
-;;; Code: 09
+;;; Code: 08
 ;;;
 ;;; If the cursor is at the first column, it moves to the last column of the previous line.
+;;; It only moves the cursor, as the CoCo's co80 and a VT100 do: SCF erases a
+;;; typed character itself with BS, space, BS (the descriptor's backspace
+;;; option is 1).
 CurLeft             ldd       V.CurRow,u          get the current row and column values
                     beq       leave               branch if they're zero
                     decb                          decrement the column value
-                    bpl       EraseChar           erase the character
+                    bpl       setpos@             still on this row
                     ldb       V.WWidth,u          get the number of columns
                     decb                          minus 1
-                    deca                          decrement the counter
-                    bpl       EraseChar           branch until done
+                    deca                          up a row
+                    bpl       setpos@
                     clra                          clear A
-
-* Entry:  A = The row of the character to erase.
-*         B = The column of the character to erase.
-EraseChar           std       V.CurRow,u          save D to the current row and column
-                    ldb       V.WWidth,u          get the number of columns
-                    mul                           calculate the product
-                    addb      V.CurCol,u          add in the current column
-                    adca      #0                  add in the carry bit
-                    ldx       #G.ScrStart         point to the start of the screen
-                    leax      d,x                 advance to the calculated osition
-                    clr       1,x                 erase the character
+setpos@             std       V.CurRow,u          save D to the current row and column
 leave               rts                           return
 
 CurDown             ldd       V.CurRow,u          get the current row and column
@@ -1395,6 +1373,7 @@ SSScTyp             lda       V.ScTyp,u            get the screen type
 ;;;        CC = Carry flag set to indicate error.
 SSReady             lda       V.IBufH,u           else get get the buffer tail ptr
                     suba      V.IBufT,u           A = the number of characters ready to read
+                    anda      #KBufSz-1           modulo the buffer size: the head may have wrapped past the tail
                     sta       R$B,x               save in the caller's B
                     beq       NotReady            if there's no data in keyboard buffer, return the "not ready" error
 SSEOF               clrb                          clear the error code and carry

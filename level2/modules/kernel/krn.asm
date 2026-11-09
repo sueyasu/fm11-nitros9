@@ -97,7 +97,11 @@ MName               fcs       /Krn/
                     fcc       /www.nitros9.org /
                   ELSE
                   IFEQ    fm11
+                  IFNE    immunity ; i-MMU-nity kernel size adjustment
+                    fcc       /www.nit/
+                  ELSE
                     fcc       /www.nitr/
+                  ENDC
                   ENDC
                   ENDC
                   ENDC
@@ -240,13 +244,17 @@ cr2@                bra       cr2@      loop forever
 
 * The Kernel entry point.
 entry               equ       *         ; define assembler symbol entry
+                  IFNE    BtPreld ; begin conditional assembly for BtPreld
+* The loader preloaded the bootfile and passed its start in X and its
+* size in Y; keep them above the system block that is about to be cleared.
+                    stx       $2000     ; stash pointer to bootfile in memory
+                    sty       $2002     ; stash size of bootfile
+                  ENDC
 * Initialize the system block (the lowest 8KB of memory).
 *[[[ Wildbits PORT
                   IFNE    wildbits ; begin conditional assembly for wildbits
 * Wildbits-specific initialization to get the Wildbits to a sane state.
                     orcc      #IntMasks ; mask interrupts
-                    stx       $2000     ; stash pointer to bootfile in memory
-                    sty       $2002     ; stash size of bootfile
                     ldd       #$FF00    ; A = $FF, B = $00
                     tfr       b,dp      ; transfer 0 to direct page
 * Scrub the FPGA interrupt controller - ALL four groups.  The controller
@@ -416,14 +424,12 @@ l@                  std       ,x++      ; now clear memory 16 bits at a time
 * In following line, CRC=ON if it is STA <D.CRC, CRC=OFF if it is a STB <D.CRC
                     stb       <D.CRC    ; set the CRC checking flag to off
 
-*[[[ Wildbits PORT
-                  IFNE    wildbits ; begin conditional assembly for wildbits
+                  IFNE    BtPreld ; begin conditional assembly for BtPreld
                     ldx       $2000     ; get pointer to bootfile in memory stashed earlier
                     stx       <D.BtPtr  ; save it in globals
                     ldx       $2002     ; get bootfile size stashed earlier
                     stx       <D.BtSz   ; save it in globals
                   ENDC
-*]]] Wildbits PORT
 
 * Initialize the interrupt vector tables, and move pointer data down to page 0.
 *[[[ Wildbits PORT
@@ -538,23 +544,36 @@ l@                  stu       ,x++      ; set all IRQ vectors to go to vectors f
 ********************************************************************
 * The DAT image is a data structure that indicates which
 * Dynamic Address Translator (DAT) mapping registers are in use.
-*[[[ Wildbits PORT
-* Dat.BlCt-ROMCount-RAMCount = 8 - 1 = 7
-                  IFNE    wildbits ; begin conditional assembly for wildbits
+* A preloaded bootfile whose kernel block is ordinary RAM gets all 7
+* remaining slots free (see below): Dat.BlCt-ROMCount-RAMCount = 8 - 1 = 7
+                  IFNE    BtPreld-KrnFixW ; begin conditional assembly for BtPreld-KrnFixW
                     lda       #$07      ; initialize all rest of the blocks to be free
                   ELSE
 *]]] Wildbits PORT
+*[[[ i-MMU-nity PORT
+* Slot 1 ($2000-$3FFF) of the system map permanently holds Bt.Block, a
+* motherboard block the VDG can display: covdg keeps its text screens there
+* (the boot screen is its $200-$3FF). Pages $20-$3F are reserved below.
+                  IFNE    immunity ; begin conditional assembly for immunity
+                    ldu       #Bt.Block ; the VDG text screen block
+                    stu       ,x++      ; in slot 1
+                    lda       #$05      ; initialize the other 5 blocks to be free
+                  ELSE
+*]]] i-MMU-nity PORT
 * Dat.BlCt-ROMCount-RAMCount = 8 - 1 - 1 = 6
                     lda       #$06      ; initialize the rest of the blocks to be free
+                  ENDC
                   ENDC
                     ldu       #DAT.Free ; load the free marker
 l@                  stu       ,x++      ; store it
                     deca                ; bump up the counter
                     bne       l@        ; loop if not done
 
-* Wildbits: we call F$SRqMem later on the entire bootfile which includes krn starting
-* at Bt.Start. So we DON'T mark the kernel block as allocated in our DAT image.
-                  IFEQ    wildbits ; begin conditional assembly for wildbits
+* A preloaded bootfile includes krn, so where the kernel block is ordinary
+* RAM, F$SRqMem allocates it later with the rest of the bootfile and we
+* DON'T mark it in our DAT image.  A fixed kernel window (KrnFixW) is never
+* allocated, so it is always marked.
+                  IFEQ    BtPreld-KrnFixW ; begin conditional assembly for BtPreld-KrnFixW
                     ldu       #KrnBlk   ; get the block where the kernel resides
                     stu       ,x        ; and save it in the last 8K slot
                   ENDC
@@ -595,7 +614,15 @@ pt_clr@             sta       ,x+       clear this slot
 
 * Update the system memory map to reserve the area used for global memory.
                     ldx       <D.SysMem ; get the system memory map pointer
+*[[[ i-MMU-nity PORT
+* Also reserve pages $20-$3F (system slot 1, the VDG text screen block) so
+* F$SRqMem never hands them out; covdg manages them.
+                  IFNE    immunity ; begin conditional assembly for immunity
+                    ldb       #$40      ; globals ($00-$1F) plus text screens ($20-$3F)
+                  ELSE
+*]]] i-MMU-nity PORT
                     ldb       <D.CCStk  ; get the MSB of the top of kernel memory
+                  ENDC
 * X indexes the system memory map.
 * B represents the number of 256-byte pages available.
 * Walk through the map, changing the corresponding elements from 0
@@ -632,57 +659,29 @@ KrnRsvSlot2         inc       ,x+       ; mark it as used
                   ENDC
 *]]] Wildbits PORT
 
-                  IFNE    picothing ; begin conditional assembly for picothing
-* Mark kernel block pages ($E0-$FF) as in-use so FSRqMem doesn't allocate them.
-* On CoCo3, block 7 is ROM/IO and handled by hardware. On picothing, block 7
-* is real RAM holding the kernel and must be reserved in D.SysMem.
-                    leax      $E0-$20,x point to page $E0 in system memory map
-                    ldb       #32       32 pages in block 7
-pt@                 inc       ,x+       mark page as used
-                    decb
-                    bne       pt@
+                  IFNE    KrnFixW ; begin conditional assembly for KrnFixW
+* Mark the fixed kernel window's pages ($E0-$FF) as in use so F$SRqMem never
+* allocates them: the window is one physical page (KrnBlk), shared by every
+* task, and holds the kernel.
+                    leax      $E0-$20,x ; point to page $E0 in the system memory map
+                    ldb       #32       ; 32 pages in the window
+KrnRsvWin           inc       ,x+       ; mark this page as used
+                    decb                ; done?
+                    bne       KrnRsvWin ; no, keep going
                   ENDC
 
-*[[[ Wildbits PORT
-                  IFNE    wildbits ; begin conditional assembly for wildbits
-* We already know we have 512K of RAM, so we won't go through a memory
-* sizing check.
+                  IFNE    RAMBlks ; begin conditional assembly for RAMBlks
+* The RAM size is fixed, so skip the memory sizing check.
                     ldx       <D.BlkMap ; get the pointer to 8KB block map
-                    ldd       #$0140    ; A = 1, B = $40 (512K of RAM)
-                    sta       ,x        ; mark block 0 as allocated
-                    inca                ; D = $240 (512K)
-                    std       <D.BlkMap+2 ; save the newly computed memory block map end pointer
-* For the Wildbits port, the entire bootfile is loaded into RAM by FEU, so we call
-* F$SRqMem to allocate the memory we need (F$Boot would normally do this, but we
-* don't use F$Boot on Wildbits).
-* Because FEU loads the bootfile into 8KB blocks starting DOWN from 7, we need
-* to temporarly fake out the DAT block map to show lower blocks as allocated
-* so that F$SRqMem (and F$AllImg) allocate the correct 8K blocks that contain
-* the loaded bootfile.
-                    ldb       <D.BtPtr  ; get the pointer to the bootfile
-                    lsrb                ; B = B / 2
-                    lsrb                ; B = B / 4
-                    lsrb                ; B = B / 8
-                    lsrb                ; B = B / 16
-                    lsrb                ; B = B / 32
-                    decb                ; decrement B
-                    pshs      b         ; save on the stack
-                    lda       #RAMInUse ; get the "RAM in use flag"
-l@                  sta       b,x       ; store the flag in the appropriate offset
-                    decb                ; decrement the counter
-                    bne       l@        ; branch if more
-                    ldd       <D.BtSz   ; get the bootfile size
-                    os9       F$SRqMem  ; allocate the needed amount of memory
-
-                    clra                ; set the "block free" flag
-                    puls      b         ; recover the offset we saved earlier on the stack
-l@                  sta       b,x       ; store the flag in the appropriate offset
-                    decb                ; decrement the counter
-                    bne       l@        ; branch if more
-                    ldx       <D.BtPtr  ; get start address of the bootfile in memory
-                    ldd       <D.BtSz   ; get MSB of bootfile size
+                    lda       #$01      ; get the "allocated" flag
+                    sta       ,x        ; mark block 0 (global memory) as allocated
+                  IFNE    KrnFixW ; begin conditional assembly for KrnFixW
+                    sta       KrnBlk,x  ; and the fixed kernel block
+                  ENDC
+                    ldd       <D.BlkMap ; get the start of the block map
+                    addd      #RAMBlks  ; one entry per 8KB block
+                    std       <D.BlkMap+2 ; save the memory block map end pointer
                   ELSE
-*]]] Wildbits PORT
 ********************************************************************
 * Determine how many 8KB blocks of physical memory are available and
 * update the memory block map end pointer (D.BlkMap+2) accordingly.
@@ -771,6 +770,19 @@ KrnBlock            aslb                ; B <= 1 (hi bit goes into carry, 0 goes
 * $0240 = 512KB  ( 64 8KB blocks)
 * $0280 = 1024KB (128 8KB blocks)
 * $0300 = 2048KB (256 8KB blocks)
+*[[[ i-MMU-nity PORT
+* The i-MMU-nity has at least 512K, so there are no missing blocks to mark.
+* Instead reserve MMU blocks $38-$3E, the CoCo 1/2 motherboard RAM and the
+* only RAM the SAM/VDG can display ($3F holds krn). NotRAM, not RAMinUse, so
+* F$AllRAM/F$AlHRAM skip them and F$DelRAM can't free them; covdg claims a
+* screen block by setting RAMinUse on it. $3E stays reserved as the block
+* DAT.Free maps unused slots to. Bt.Block ($3B) is then marked RAMinUse
+* below. X=D.BlkMap here.
+                  IFNE    immunity ; begin conditional assembly for immunity
+                    leax      $38,x     ; first motherboard block
+                    ldd       #NotRAM*256+7 ; reserve 7 blocks, $38-$3E
+                  ELSE
+*]]] i-MMU-nity PORT
                     bitb      #%00110000 ; is the block above 128K-256K?
                     beq       Mc09KrnStart ; yes, no need to mark block map
                     tstb                ; is it 2 meg?
@@ -780,25 +792,73 @@ KrnBlock            aslb                ; B <= 1 (hi bit goes into carry, 0 goes
                     leax      -1,x      ; skip good blocks that are RAM
                     lda       #NotRAM   ; load the "Not RAM" flag
                     subb      #$3F      ; calculate the number of blocks to mark as not RAM
+                  ENDC
 l@                  sta       ,x+       ; mark them all
                     decb                ; are we done?
                     bne       l@        ; not yet
+*[[[ i-MMU-nity PORT
+* Bt.Block is system RAM in use: slot 1 of the system map always holds it.
+* Marked NotRAM, F$AllImg would fail with E$MemFul whenever F$SRqMem asks
+* it for slots 0-1, which it does when a request straddles two slots that
+* are both already mapped.
+                  IFNE    immunity ; begin conditional assembly for immunity
+                    lda       #RAMinUse ; get the RAM in use flag
+                    sta       Bt.Block-$3F,x ; mark Bt.Block (X=D.BlkMap+$3F here)
+                  ENDC
+*]]] i-MMU-nity PORT
+
+                  ENDC
 
 * ASSUME: however we got here, B=0
 Mc09KrnStart
-                    ldx       #Bt.Start ; start address of the boot track in memory
-                  IFNE    picothing ; begin conditional assembly for picothing
-                    lda       #22       scan $E800-$FE00 (modules extend past $FA00)
+
+                  IFNE    BtPreld ; begin conditional assembly for BtPreld
+* The loader preloaded the bootfile, so allocate the memory it occupies
+* (F$Boot would normally do this, but there is no F$Boot here).  It was
+* loaded into 8KB blocks ending at the top of the system map, so fake the
+* block map to show the lower blocks as allocated, which makes F$SRqMem
+* (and F$AllImg) allocate exactly the blocks that hold the bootfile.  The
+* bootfile must not start in block 1, or the count below would wrap.
+* ASSUME: X points to the block map
+                    ldb       <D.BtPtr  ; get the pointer to the bootfile
+                    lsrb                ; B = B / 2
+                    lsrb                ; B = B / 4
+                    lsrb                ; B = B / 8
+                    lsrb                ; B = B / 16
+                    lsrb                ; B = B / 32
+                    decb                ; decrement B
+                    pshs      b         ; save on the stack
+                    lda       #RAMInUse ; get the "RAM in use flag"
+l@                  sta       b,x       ; store the flag in the appropriate offset
+                    decb                ; decrement the counter
+                    bne       l@        ; branch if more
+                  IFNE    KrnFixW ; begin conditional assembly for KrnFixW
+* The fixed kernel window is never allocated: take only the part below it.
+                    ldd       #$E000    ; the start of the window
+                    subd      <D.BtPtr  ; less the start of the bootfile
                   ELSE
-                    lda       #18       ; size of the boot track is $1800
+                    ldd       <D.BtSz   ; get the bootfile size
                   ENDC
+                    os9       F$SRqMem  ; allocate the needed amount of memory
+
+                    clra                ; set the "block free" flag
+                    puls      b         ; recover the offset we saved earlier on the stack
+l@                  sta       b,x       ; store the flag in the appropriate offset
+                    decb                ; decrement the counter
+                    bne       l@        ; branch if more
+* Validate every module in the bootfile, krn included.
+                    ldx       <D.BtPtr  ; get start address of the bootfile in memory
+                    ldd       <D.BtSz   ; get the bootfile size
+                  ELSE
+                    ldx       #Bt.Start ; start address of the boot track in memory
+                    lda       #18       ; size of the boot track is $1800
                   ENDC
 
 * Verify the modules in the boot area and update/build a module index.
                     lbsr      I.VBlock  ; perform module validation
                     bsr       KrnSystemMemoryMap ; then mark the system map
 
-                  IFEQ    wildbits ; begin conditional assembly for wildbits
+                  IFEQ    BtPreld ; begin conditional assembly for BtPreld
 * BGP - Load bootfile and link to init. We no longer try to link to init first and then
 * call F$Boot. This saves bytes.
                     os9       F$Boot    ; load bootfile here +BGP+
@@ -846,7 +906,7 @@ KrnBadCantCrsh      jmp       <D.Crash  ; obviously can't do it, crash machine
 
 * Update the system memory map to reserve the area the kernel uses.
 KrnSystemMemoryMap  ldx       <D.SysMem ; get the system memory map pointer
-                  IFNE    wildbits ; begin conditional assembly for wildbits
+                  IFNE    BtPreld ; begin conditional assembly for BtPreld
                     lda       #NotRAM   ; get the "not RAM" flag
                     ldb       <D.BtPtr  ; and the boot pointer MSB
                   ELSE
@@ -1071,6 +1131,7 @@ l@                  lda       ,u+       ; get the source byte
                   ENDC
                     lbra      BackTo1   ; return to the user
 
+                  IFNE    fm11 ; FM-11: fixed MMR window stack mapping
 * Copy the register stack from user to system.
 *
 * Entry: U = The pointer to the register stack in the process descriptor.
@@ -1129,6 +1190,39 @@ l@                  ldu       ,x++      ; get the source bytes
                     std       >DAT.Regs+5 ; and restore the DAT
                   ENDC
                     puls      cc,x,y,u,pc ; restore & return
+
+                  ELSE    ; upstream: F$Move-based stack copies
+* Copy the register stack from user to system.
+*
+* Entry: U = The pointer to the register stack in the process descriptor.
+CpUsrStkTo          pshs      cc,x,y,u  ; preserve registers
+                    lda       P$Task,x  ; copy from the process's task
+                    ldb       <D.SysTsk ; to the system task
+                    ldx       P$SP,x    ; from the process's stack
+                    bra       CpRegStk  ; go copy it
+
+* Copy the register stack from system to user.
+*
+* Entry: U = The pointer to the register stack in the process descriptor.
+CpSysStkTo          pshs      cc,x,y,u  ; preserve registers
+                    lda       <D.SysTsk ; copy from the system task
+                    ldb       P$Task,x  ; to the process's task
+                    ldx       P$SP,x    ; get the process's stack
+                    exg       x,u       ; and copy from the register stack to it
+
+* Copy a register stack.  F$Move maps both sides through their own DAT
+* images, so this works wherever the process descriptor is, even in the
+* $A000-$DFFF window that F$Move uses.
+*
+* Entry: A = The source task number.
+*        B = The destination task number.
+*        X = The source register stack.
+*        U = The destination register stack.
+CpRegStk            ldy       #R$Size   ; get the size of the register stack
+                    lbsr      FMoveTarget ; copy it
+                    puls      cc,x,y,u,pc ; restore & return
+
+                  ENDC
 
 * Process software interrupts from system state.
 *
