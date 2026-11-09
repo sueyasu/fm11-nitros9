@@ -57,7 +57,7 @@ build_one() {
 --includedir=$ROOT/level2/modules/kernel \
 --includedir=$ROOT/level1/modules \
 --includedir=$ROOT/level1/modules/kernel \
--Dfm11=1 -DH6309=$H6309 \
+-Dfm11=1 -DH6309=$H6309 -DUserMemLimit=64768 \
 -DNOS9VER=$NOS9VER -DNOS9MAJ=$NOS9MAJ -DNOS9MIN=$NOS9MIN"
 
     # shellcheck disable=SC2086

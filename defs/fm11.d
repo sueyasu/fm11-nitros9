@@ -25,8 +25,6 @@ UART_TXRDY          EQU       $01
 UART_RXRDY          EQU       $02
 DPort               SET       $FD30
 HW.Page             SET       $FD
-* F$CpyMem must not copy into FM-11 I/O or fixed SRAM ($FD00-$FFFF).
-UserMemLimit        equ       $FD00
                     ENDC
 
 * FM-11 FDC registers used by the initial read-only /D0 driver.
