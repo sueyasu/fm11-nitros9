@@ -1131,67 +1131,6 @@ l@                  lda       ,u+       ; get the source byte
                   ENDC
                     lbra      BackTo1   ; return to the user
 
-                  IFNE    fm11 ; FM-11: fixed MMR window stack mapping
-* Copy the register stack from user to system.
-*
-* Entry: U = The pointer to the register stack in the process descriptor.
-CpUsrStkTo          pshs      cc,x,y,u  ; preserve registers
-                    ldb       P$Task,x  ; get the task #
-                    ldx       P$SP,x    ; and the stack pointer
-                    lbsr      FMoveLater ; calculate the block offset (only affects A&X)
-                    leax      -$6000,x  ; adjust the pointer to where the memory map will be
-                    bra       KrnBlockNumberWhere ; go copy it
-
-* Copy the register stack from system to user.
-*
-* Entry: U = The pointer to the register stack in the process descriptor.
-CpSysStkTo          pshs      cc,x,y,u  ; preserve registers
-                    ldb       P$Task,x  ; get the task # of destination
-                    ldx       P$SP,x    ; and the stack pointer
-                    lbsr      FMoveLater ; calculate the block offset (only affects A&X)
-                    leax      -$6000,x  ; adjust the pointer to where the memory map will be
-                    exg       x,y       ; swap pointers & copy
-
-* Copy a register stack.
-*
-* Entry: X = The source register stack.
-*        Y = The destination register stack.
-*        A = The offset into the DAT image of stack.
-*        B = The task number.
-KrnBlockNumberWhere leau      a,u       ; point to the block number where stack is
-                    orcc      #IntMasks ; shutdown interrupts while we do this
-                  IFNE    fm11
-* Logical 8 KiB windows 5 and 6 expand to MMR pairs A/B and C/D.
-                    lda       1,u
-                    lbsr      FM11Map5
-                    lda       3,u
-                    lbsr      FM11Map6
-                  ELSE
-                    lda       1,u       ; get the first block
-                    ldb       3,u       ; get a second just in case of overlap
-                    std       >DAT.Regs+5 ; map in the blocks
-                  ENDC
-                  IFNE    H6309   ; begin conditional assembly for H6309
-                    ldw       #R$Size   ; get the size of register stack
-                    tfm       x+,y+     ; copy it
-                  ELSE
-                    ldb       #R$Size/2 ; get the size of the register stack
-l@                  ldu       ,x++      ; get the source bytes
-                    stu       ,y++      ; and save them in the destination
-                    decb                ; decrement the counter
-                    bne       l@        ; branch if not done
-                  ENDC
-                    ldx       <D.SysDAT ; get the system DAT pointer
-                  IFNE    fm11
-                    lbsr      FM11Restore56
-                  ELSE
-                    lda       $0B,x     ; get the first block we took out
-                    ldb       $0D,x     ; and the second
-                    std       >DAT.Regs+5 ; and restore the DAT
-                  ENDC
-                    puls      cc,x,y,u,pc ; restore & return
-
-                  ELSE    ; upstream: F$Move-based stack copies
 * Copy the register stack from user to system.
 *
 * Entry: U = The pointer to the register stack in the process descriptor.
@@ -1222,7 +1161,6 @@ CpRegStk            ldy       #R$Size   ; get the size of the register stack
                     lbsr      FMoveTarget ; copy it
                     puls      cc,x,y,u,pc ; restore & return
 
-                  ENDC
 
 * Process software interrupts from system state.
 *
