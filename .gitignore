@@ -3,12 +3,17 @@ default.proraw
 # macOS desktop services storage file
 .DS_Store
 
+# JetBrains IDE project files
+.idea/
+
 # Build intermediates
 .mods/
 .obj/
 .lib/
 .sys/
 recipes/**/cfg/
+recipes/picothing/build-logs/
+recipes/picothing/*/inetd.conf
 level2/coco3/defs/*.d
 
 # Assembler/linker listings and maps
@@ -20,8 +25,7 @@ level2/coco3/defs/*.d
 buildinfo
 bootfile
 kerneltrack
-os9kernel
-os9kernel_dw
+krnslot
 rel_picothing
 rel_picothing.srec
 helpmsg

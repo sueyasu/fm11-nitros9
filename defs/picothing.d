@@ -60,6 +60,9 @@ DAT.WrPr            EQU       0         write protect (not supported)
 DAT.WrEn            EQU       0         write enable (not supported)
 KrnBlk              SET       $FF       physical page number of the kernel
 
+* Start of protected upper memory (DAT RAM and I/O).
+UserMemLimit        equ       $FE00
+
 *
 * Virtual MC6850 ACIA — console (via Pico at $FFC4-$FFC5)
 *
@@ -102,20 +105,65 @@ WatchCtl            EQU       IO.Base+$CA hardware vector watchpoint control
 PTIDEBase           EQU       IO.Base+$00 PATA base address
 
 *
+* Video Pico — second RP2350 graphics/console coprocessor (via GAL at $FF10-$FF11)
+*
+* Two MC6850-shaped registers with separate hardware read and write arrays, so
+* the read and write meanings share an offset.  VID.Data moves one byte each
+* way; VID.Stat carries the flow-control and status bits when read, or takes a
+* control command when written.  All access is polled — there is no interrupt
+* dependency (VID.Stat bit 7 is reserved for a future interrupt flag).
+*
+VID.Data            EQU       IO.Base+$10 read receive byte / write transmit byte
+VID.Stat            EQU       IO.Base+$11 read status / write control
+* VID.Info: read-only panel-geometry info block.  Write any value to home
+* the walk index, then read six bytes: width hi, width lo, height hi,
+* height lo, text columns, text rows (big-endian, pixels first).  The
+* values come from the pico renderer's own geometry, so they never drift
+* from what is drawn; the index wraps, so an over-long read restarts.
+VID.Info            EQU       IO.Base+$13 panel geometry (write=home, read x6)
+
+* VID.Stat status bits (read from VID.Stat)
+VID.RDRF            EQU       %00000001 receive data available
+VID.TDRE            EQU       %00000010 transmit space free
+VID.RDY             EQU       %00000100 video pico alive and initialised
+VID.VerMsk          EQU       %00111000 protocol version mask (bits 5-3)
+* Version 1 in the VID.VerMsk position - the driver's liveness check.  An
+* absent/rebooting pico floats the bus to $FF (version 7) or reads $00
+* (version 0); a live pico reads version 1, so a version mismatch means the
+* device is not present and the rest of the status byte must not be believed.
+VID.Ver1            EQU       %00001000 protocol version 1 (live device)
+
+* VID.Ctl control bits (write to VID.Stat)
+VID.Rset            EQU       %00000001 soft reset: flush the fifos
+VID.Loop            EQU       %00000010 loopback: transmit bytes echo to receive
+
+*
+* Battery-backed RTC — DS12885 in Motorola mode (via GAL at $FF32-$FF33)
+*
+* MC146818-register-compatible.  Index/data pair: write the register
+* number to RTC.Idx, then read or write the value at RTC.Dat.  Each
+* access is two steps and must not be interrupted (mask IRQs around it).
+* 14 clock/control registers plus 114 bytes of NVRAM at $0E-$7F.
+*
+RTC.Idx             EQU       IO.Base+$32 register-select (index) port
+RTC.Dat             EQU       IO.Base+$33 data port
+
+*
 * Boot
 *
-                  IFEQ    Level-1
-* Level 1 boot definitions
-* The os9kernel blob (krn + krnp2 + init + boot) is pre-loaded here and
-* scanned by the kernel cold-start, so it must hold all four modules
-* (~3.9KB). $EC00-$FDFF = 4.5KB, leaving room; $EC00 also matches where
-* Level 2 places krn.
-Bt.Start            EQU       $EC00     kernel starts here
-Bt.Size             EQU       $1200     kernel area ($EC00-$FDFF)
-                  ELSE
-* Level 2 boot definitions
-Bt.Start            EQU       $E800     boot_picothing at $E800 (padded to 1024), krn at $EC00
-                  ENDC
+* REL preloads the whole bootfile, krn included, so that it ends at
+* Bt.End, and passes its start in X and its size in Y; the kernel adopts
+* it in place, so there is no boot module and no F$Boot (the Wildbits
+* scheme).  $FC00-$FDFF holds the Pico's debug monitor, so the bootfile
+* ends below it.  At Level 2 krn is the last module and sits at $EC00,
+* inside the fixed $E000-$FFFF window (KrnFixW); at Level 1 it is the
+* first.
+*
+BtPreld             EQU       1         REL preloads the bootfile
+KrnFixW             EQU       1         the kernel window is the fixed page KrnBlk
+Bt.End              EQU       $FC00     the bootfile ends here
+RAMBlks             EQU       $100      fixed RAM: 2MB in 8K blocks
+Bt.Start            EQU       $EC00     where krn sits at Level 2
 SHIFTBIT            EQU       0         no shift key on serial console
 
 *

@@ -141,6 +141,11 @@ build_media() {
         h0_m2233b_fm11 h0_m2234b_fm11 h0_m2235b_fm11 \
         h0_m2241b_fm11 h0_m2242b_fm11 h0_m2243b_fm11
     do
+        # Some modules are already installed from the 2D/2HD bootlist union.
+        # Avoid duplicate OS-9 directory entries (E$CEF / error 218).
+        if grep -Fqx "$module" "$FM/bootlists/bootlist.2d" "$FM/bootlists/bootlist.2hd"; then
+            continue
+        fi
         os9 copy -o=0 "$OUT/$module" "$RBF,SYS/MODULES/$module"
     done
 

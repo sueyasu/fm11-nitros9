@@ -26,7 +26,7 @@ edition             set       3
 PSG.Base            equ       PSG_BOTH_PORT
 
 * Level 2 VTIO. Level 1 is vtio_l1.asm (MAPSLOT 7, no grfdrv256).
-* Do not alias 1-byte D.Boot. D.KbdSta is the 2-byte overlay at $18
+* Do not alias 1-byte D.Boot. D.KbdSta is the 2-byte overlay at $1A
 * from wildbits_vtio.d.
 
 * System LUT 0 slot 2 home is SRAM $03. Glyph/erase/scroll/blank,
@@ -62,7 +62,6 @@ llnam               fcs       "grfdrv256"
 * VTIO Alternate IRQ routine - Entered from Clock every 1/60th of a second
 *
 * The interrupt service routine is responsible for:
-*   - handling the K keyboard (if available)
 *   - decrementing the tone counter
 *   - select the new active window if needed (when that time comes)
 *   - updating graphics cursors if needed (when that time comes)
@@ -70,32 +69,58 @@ llnam               fcs       "grfdrv256"
 
 AltISR
                     ldu       D.KbdSta
-* Handle keyboard (if available)
-                    ldx       V.KeyDrvEPtr,u ; computer have polling keybard?
-                    cmpx      #$0000
-                    beq       HandleMSTimer ; no, just handle mouse
-                    lda       V.LastCh,u ; if LastCh=0, skip keyrepeat handling
-                    beq       HandleKeyboard@
-                    dec       V.KRTimer,u ; decrement repeat timer
-                    bne       HandleKeyboard@ ; if not 0, then don't repeat yet
-                    ldx       V.KeyDrvEPtr,u
-                    jsr       9,x       ; else jmp to keyrepeat routine
-HandleKeyboard@     ldx       V.KeyDrvEPtr,u
-                    jsr       6,x       ; call AltIRQ routine in keydrv
+* The keyboard is not handled here: keydrv services it from its own
+* interrupt and the core paces key repeat.
 
 * Handle Mouse Timer. When timer wraps to zero, turn it off
-* Mouse does not hide correctly, so park it at right side of screen
+* Clearing MS_MEN is a true hide on v8_rc11 and later cores (the pointer pixel
+* is gated on the enable bit there).  On older cores the enable was ignored by
+* the pixel path, so the cursor stays visible, frozen, until the mouse moves.
 * Check if mouse is already off, if it is, then skip timer code
 * Mouse timer reset is in mousedrv_ps2.asm interrupt procedure
 * Mouse timer resets on every mouse interrupt
 * This should hide the mouse after 4 to 5 seconds of inactivity
-HandleMSTimer       tst       MS_MEN    ; check if mouse cursor already off
+* The timer and the found flag are mousedrv's (gr.MsDrv), one per machine.
+* SS.MsCfg in the live terminal's gr.MsTbl row skips the timer while the
+* process that set it is alive: MC.On shows the pointer (when a mouse was
+* found), MC.Off hides it (mousedrv does not show it on movement either).
+* Once that process has exited (D.PrcDBT[id] reads 0) the row goes back to
+* the defaults.  gr.LiveTerm is $FF when no terminal is open.
+HandleMSTimer       ldb       >gr.LiveTerm
+                    cmpb      #G.TermMax
+                    bhs       autohide@ ; no live terminal
+                    lslb                ; b = id * 8, the row
+                    lslb
+                    lslb
+                    ldx       #gr.MsTbl
+                    abx
+                    tst       MT.Cfg,x  ; a setting for this terminal?
+                    beq       autohide@ ; no, auto-hide
+                    clra                ; d = owner id, unsigned
+                    ldb       MT.CfgID,x ; is the process that set it alive?
+                    ldy       <D.PrcDBT
+                    leay      d,y
+                    tst       ,y
+                    beq       expire@   ; no, back to the defaults
+                    lda       MT.Cfg,x
+                    bita      #MC.Off   ; always off?
+                    beq       on@
+                    clr       MS_MEN    ; hide it
+                    bra       HandleKeySwtchTrm
+on@                 tst       MS_MEN    ; pointer already on?
+                    bne       HandleKeySwtchTrm
+                    tst       >gr.MSFound ; mouse found?
+                    beq       HandleKeySwtchTrm ; no: no pointer to show
+                    lda       #$01
+                    sta       MS_MEN    ; show mouse, mode 0 (as mousedrv)
+                    bra       HandleKeySwtchTrm
+expire@             clr       MT.Cfg,x
+                    clr       MT.CfgID,x
+autohide@           tst       MS_MEN    ; check if mouse cursor already off
                     beq       HandleKeySwtchTrm ; mouse off: still check switch (glue #10)
-                    inc       V.MSTimer,u ; increment mouse auto-hide timer
+                    inc       >gr.MSTimer ; increment mouse auto-hide timer
                     bne       HandleKeySwtchTrm ; timer not wrapped: still check switch
                     clr       MS_MEN    ; if timer flips to 0, turn off mouse cursor
-                    ldd       #640      ; park mouse at right border
-                    std       MS_XH     ; turning off cursor doesn't work correctly at the moment
 
 * Handle Terminal Switching
 HandleKeySwtchTrm   lda       >gr.SwitchReq
@@ -299,8 +324,10 @@ ex@                 ldd       #0        ; set D to 0
 ****************************************************************
 ******             Start GrfDrv Init Routines             ******
 ****************************************************************
-ClrGrfMem           ldx       #GrfMem   ; point to GrfMem
-                    ldy       #512      ; size
+* GrfMem and F256Gfx ($1100-$12FF), and the mouse globals below them
+* ($1080 up, defs/wildbits_vtio.d) - one range, nothing else is in it.
+ClrGrfMem           ldx       #gr.MsDrv ; the mouse globals, then GrfMem
+                    ldy       #GrfMem+512-gr.MsDrv ; up to $12FF
 clrgrf              clr       ,x+
                     leay      -1,y
                     bne       clrgrf
@@ -605,6 +632,7 @@ NoUnlink
                     ldx       V.MSDrvEPtr,u
                     cmpx      #0000
                     beq       NoMouse
+                    jsr       3,x       ; mousedrv Term: remove its IRQ, hide the pointer
                     ldd       #0
                     std       V.MSDrvEPtr,u
                     pshs      u
@@ -702,7 +730,7 @@ SWDestX             rts
 * gr.b*/gr.d* block entirely and take A/B/Y in registers, so gr.TermBlk
 * is their ONLY parameter out of GrfMem.  Nothing else on the PutGlyph
 * path refreshes it - the last writer could have been another terminal's
-* EraseLine (SetThisTermGrfPtrs) or PutCell/ChgPal (SetWDest) - so
+* EraseLine (SetThisTermGrfPtrs) or ChgPal (SetWDest) - so
 * without this a shadow glyph lands in the wrong terminal's backup
 * buffer.  With one terminal it could never be wrong; with two it is
 * wrong most of the time.
@@ -733,21 +761,6 @@ DoScroll            tst       V.TermLive,u
                     lbra      CallScrollShadow
 dslive@             lbra      CallScrollLive
 dsx@                rts
-
-*******************************************************************
-* PutCell - A = glyph, X = cell offset.  Snapshot + GF.Cell.
-* Colour = V.FBCol; dest via SetWDest.  Used by EraseChar.
-*   -> b2 glyph, b3 colour attr, d1 cell offset, b4 dest
-*******************************************************************
-PutCell             pshs      d,x
-                    sta       >gr.b2    ; glyph
-                    stx       >gr.d1    ; cell offset
-                    lda       V.FBCol,u
-                    sta       >gr.b3    ; colour attr
-                    bsr       SetWDest  ; sets b4
-                    ldb       #GF.Cell
-                    lbsr      CallGrfDrvNoPD
-                    puls      d,x,pc
 
 * Write — glyph paint is GF.Write (LUT 1). Cursor I/O stays here.
 *
@@ -930,6 +943,8 @@ Esc05Tbl            fcb       $20,0
                     fdb       CurChar-Esc05Tbl set cursor character
                     fcb       $23,1
                     fdb       CurRate-Esc05Tbl set cursor flash rate
+                    fcb       $24,1
+                    fdb       CurCol-Esc05Tbl set cursor colour
                     fcb       $00
 
 Esc1FTbl            fcb       $20,0
@@ -1171,41 +1186,38 @@ ErEOLine            lbsr      SetThisTermGrfPtrs
 ***********************************************************************
 *** 05 20 - Cursor Off/Hide - Turns the Cursor Off
 ***
-CurOff              tst       V.TermLive,u
-                    beq       CurOffX
-                    ldx       #TXT.Base
-                    ldb       VKY_TXT_CURSOR_CTRL_REG,x
-                    andb      #~Vky_Cursor_Enable
-                    stb       VKY_TXT_CURSOR_CTRL_REG,x
-CurOffX             rts
+* The cursor settings (05 20-05 24) are per terminal: each updates this
+* terminal's copy (V.CrsrCtl/V.CrsrChr/V.CrsrCol) and writes the hardware
+* only while the terminal is live.  The hardware holds one set, so a
+* shadow terminal writing it would change the cursor of whatever is on
+* screen; grfdrv256's switch programs the copy when the terminal comes
+* forward (CrsrPut).
+CurOff              lda       V.CrsrCtl,u
+                    anda      #^Vky_Cursor_Enable
+                    bra       CurCtlSet
 
 ************************************************************************
 *** 05 21 - Cursor On/Show - Turns Cursor On
 ***
-CurOn               tst       V.TermLive,u
-                    beq       CurOnX
-                    ldx       #TXT.Base
-                    lda       VKY_TXT_CURSOR_CTRL_REG,x
+CurOn               lda       V.CrsrCtl,u
                     ora       #Vky_Cursor_Enable
+CurCtlSet           sta       V.CrsrCtl,u
+                    tst       V.TermLive,u
+                    beq       CurX
+                    ldx       #TXT.Base
                     sta       VKY_TXT_CURSOR_CTRL_REG,x
-CurOnX              rts
+CurX                rts
 
 ************************************************************************
 *** 05 22 - Set Cursor Character - 05 22 CHR
 ***
-* Guarded like CurOff/CurOn: a shadow terminal must not reach the live
-* cursor registers, or it changes the cursor of whatever is actually on
-* screen.  Unlike ChgFont0/1 below this can only DROP the request, not
-* defer it: PushBuf/PullBuf carry $FFC0-$FFCF (V.V_MCR + V.V_LayerCTL +
-* V.BordBack), and the cursor registers start at $FFD0, so there is no
-* per-terminal mirror to stage it in.  Cursor character, colour, enable
-* and flash rate are therefore global - see the doc's gap list.
-CurChar             tst       V.TermLive,u
-                    beq       CurCharX
+CurChar             lda       V.EscParms,u
+                    sta       V.CrsrChr,u
+                    tst       V.TermLive,u
+                    beq       CurX
                     ldx       #TXT.Base
-                    lda       V.EscParms,u
                     sta       VKY_TXT_CURSOR_CHAR_REG,x
-CurCharX            rts
+                    rts
 
 ************************************************************************
 *** 05 23 - Set Cursor Flash Rate
@@ -1217,20 +1229,25 @@ CurCharX            rts
 ***   XXXXX001 = .5 second flash interval
 ***   XXXXX010 = .25 second flash interval
 ***   XXXXX011 = .2 second flash interval
-* Guarded like CurChar/CurOff/CurOn: the cursor registers start at $FFD0,
-* past the 16 bytes PushBuf/PullBuf carry, so there is no per-terminal
-* mirror to defer into - a shadow terminal can only be stopped from
-* changing the live cursor's flash rate.
-CurRate             tst       V.TermLive,u
-                    beq       CurRateX
+CurRate             ldb       V.CrsrCtl,u
+                    andb      #Vky_Cursor_Enable ; preserve the cursor enable bit
+                    lda       V.EscParms,u
+                    lsla                ; the rate bits sit above the enable bit
+                    pshs      b
+                    ora       ,s+
+                    bra       CurCtlSet
+
+************************************************************************
+*** 05 24 - Set Cursor Colour - 05 24 COL
+***
+*** COL is VKY_TXT_CURSOR_COLR_REG's byte.
+CurCol              lda       V.EscParms,u
+                    sta       V.CrsrCol,u
+                    tst       V.TermLive,u
+                    beq       CurX
                     ldx       #TXT.Base
-                    ldb       VKY_TXT_CURSOR_CTRL_REG,x
-                    andb      #$01      ; preserve the cursor enable bit
-                    lsla                ; shift bits to the left
-                    pshs      a         ; save the value to OR in on the stack
-                    orb       ,s+       ; or it in with the contents of the register
-                    stb       VKY_TXT_CURSOR_CTRL_REG,x ; save it to the hardware
-CurRateX            rts
+                    sta       VKY_TXT_CURSOR_COLR_REG,x
+                    rts
 
 **********************************************************************
 * 06 - Cursor Right
@@ -1280,24 +1297,22 @@ BellBusy            clrb
 **********************************************************************
 * 08 - Cursor Left
 * If the cursor is at the first column, it moves to the last column of the previous line.
+* It only moves the cursor, as the CoCo's co80 and a VT100 do: SCF erases a
+* typed character itself with BS, space, BS (the descriptors' backspace
+* option is 1), and Shell+ writes a recalled history line and then BSs back
+* over it, which an erasing BS wiped out as it was drawn.
 *
 CurLeft             ldd       V.CurRow,u ; get the current row and column values
                     beq       leave     ; branch if they're zero
                     decb                ; decrement the column value
-                    bpl       EraseChar ; erase the character
+                    bpl       setpos@   ; still on this row
                     ldb       V.WWidth,u ; get the number of columns
                     decb                ; minus 1
-                    deca                ; decrement the counter
-                    bpl       EraseChar ; branch until done
+                    deca                ; up a row
+                    bpl       setpos@
                     clra                ; clear A
-
-* Entry:  A = The row of the character to erase.
-*         B = The column of the character to erase.
-EraseChar           std       V.CurRow,u ; save D to the current row and column
+setpos@             std       V.CurRow,u ; save D to the current row and column
                     lbsr      CalcCurPos ; resync (and row-clamp) V.CurPos
-                    ldx       V.CurPos,u ; x = cell offset
-                    lda       #C$SPAC
-                    lbsr      PutCell   ; erase the one cell
 leave               rts                 ; return
 
 **********************************************************************
@@ -1694,6 +1709,7 @@ GetStat             cmpa      #SS.EOF   ; is this the EOF call?
 *
 SSReady             lda       V.IBufH,u ; else get get the buffer tail ptr
                     suba      V.IBufT,u ; a = the number of characters ready to read
+                    anda      #KBufSz-1 ; modulo the buffer size: the head may have wrapped past the tail
                     sta       R$B,x     ; save in the caller's B
                     beq       NotReady  ; if there's no data in keyboard buffer, return the "not ready" error
 SSEOF               clrb                ; clear the error code and carry
@@ -1737,6 +1753,8 @@ SetStat             ldx       PD.RGS,y  ; get caller's registers in X
                     ldb       #GF.SetStt
 StatFwd             sta       >gr.b1    ; status code
                     pshs      b         ; gf.GetStt or GF.SetStt
+                    lda       PD.CPR,y  ; the calling process, for SS.MsCfg
+                    sta       >gr.b2    ; (grfdrv cannot see the path)
                     lbsr      SetThisTermGrfPtrs
                     puls      b
                     lbra      CallGrfDrvRet ; results, B and carry back to the caller

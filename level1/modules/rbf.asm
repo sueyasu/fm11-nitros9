@@ -1102,6 +1102,8 @@ Gst640              lda       #D$GSTA             get getstat function offset
 *        B = errcode
 *
 SetStat             ldb       R$B,u               get function code
+                    cmpb      #SS.Rename
+                    lbeq      Rename
 * TODO: remove next line since SS.Opt is 0
                     cmpb      #SS.Opt
                     bne       Sst659              not SS.Opt, skip ahead
@@ -1255,6 +1257,8 @@ ok@                 ldd       #256
                     lbsr      GtDvcNam            go parse it
                     sta       ,s                  save last character
                     lbcs      L090D               error in parse, return
+                    lbsr      ChkDvEnd            is the device name followed by a legal character?
+                    lbcs      L090D               no, return the error
                     leax      ,y                  point X to last character
                     ldy       $06,s               get path descriptor pointer
                     bra       Sst81E              skip ahead
@@ -1337,6 +1341,8 @@ Sst87B              lbsr      L0A2A               check if directory is busy
                     sty       $08,s
                     ldy       $06,s               get path descriptor pointer
                     bcs       L090D               error in pathname, return
+                    lbsr      ChkEnd              is the name followed by a legal character?
+                    bcs       L090D               no, return the error
                     lbsr      L0957
                     bra       L08C1
 
@@ -1448,6 +1454,40 @@ L097F               pshs      u,x,b
                     os9       F$LDABX
                     puls      pc,u,x,b
                     endc
+
+* Check the character that follows a name in a pathlist
+* A shell hands over the rest of its command line, so the characters that
+* separate shell commands and redirections end a pathlist too
+* Entry: A = the character after the name
+* Exit:  Carry clear if it is a slash or ends the pathlist (B is kept)
+*        Carry set and B = E$BPNam if it is any other character
+ChkDvEnd            pshs      a                   save the character
+                    anda      #$7F                drop the most significant bit
+                    cmpa      #PENTIR             does a device name end with the entire device flag?
+                    puls      a                   restore the character
+                    beq       ChkEndOK            yes, that is legal after a device name
+ChkEnd              tsta                          did the name end on its own last character?
+                    bmi       ChkEndOK            yes, nothing follows the name
+                    beq       ChkEndOK            a NUL ends the pathlist
+                    pshs      b,x                 save the length and the pathlist pointer
+                    leax      <ChkEndTb,pcr       point to the characters that may follow a name
+                    ldb       #ChkEndSz           get how many there are
+ChkEndLp            cmpa      ,x+                 is it this one?
+                    beq       ChkEndYs            yes, the name is legal
+                    decb                          count it
+                    bne       ChkEndLp            and try the next one
+                    puls      b,x                 restore the length and the pathlist pointer
+                    comb                          set the carry to indicate an error
+                    ldb       #E$BPNam            the name ends on an illegal character
+                    rts                           return the error
+ChkEndYs            puls      b,x                 restore the length and the pathlist pointer
+ChkEndOK            andcc     #^Carry             clear the carry to indicate success
+                    rts                           return with the length still in B
+
+* The characters that may follow a name: a slash starts another name, and
+* the rest end the pathlist
+ChkEndTb            fcb       PDELIM,C$CR,C$SPAC,',,';,'&,'!,'|,'<,'>,'#,'^,'(,')
+ChkEndSz            equ       *-ChkEndTb          the number of characters in the table
 
 GtDvcNam            os9       F$PrsNam            parse the filename
                     pshs      x                   preserve pointer to name
@@ -2425,6 +2465,139 @@ L1256               pshs      u,x
                     ora       #(BufBusy!SINBUF)
                     sta       PD.SMF,y
 L12C6               puls      pc,u,x
+
+* SS.Rename: parent directory path, X=old[30]+new[30], Y=60.
+* Work on directory entries through RBF; never open or modify the child FD.
+* Keep frequently accessed scalar fields in the compact indexed range.
+RNPos               equ       0
+RNFound             equ       4
+RNSeen              equ       8
+RNRec               equ       10
+RNNew               equ       40
+RNWork              equ       70
+RNInvalid           ldb       #E$BPNam
+                    bra       RNEarlyError
+RNDenied            ldb       #E$FNA
+RNEarlyError        orcc      #1
+                    rts
+Rename              ldd       R$Y,u
+                    cmpd      #60
+                    bne       RNInvalid
+                    lda       PD.MOD,y
+                    anda      #DIR.!WRITE.
+                    cmpa      #DIR.!WRITE.
+                    bne       RNDenied
+                    pshs      x,y,u
+                    leas      -RNWork,s
+                    clr       RNSeen,s
+                    ldd       PD.CP,y
+                    std       RNPos,s
+                    ldd       PD.CP+2,y
+                    std       RNPos+2,s
+                    ldx       R$X,u
+                    pshs      y,u
+                    leau      RNRec+4,s
+                    ldy       #60
+                    lbsr      Writ5CB
+                    puls      y,u
+                    lbcs      RNDone
+                    leax      RNRec,s
+                    lbsr      RNName
+                    lbcs      RNDone
+                    lbsr      RNName
+                    lbcs      RNDone
+                    ifgt      Level-1
+                    ldx       PD.Exten,y
+                    tst       PE.Lock,x
+                    lbne      RNBusy
+                    endc
+                    lbsr      L1237
+                    lbcs      RNDone
+                    ifgt      Level-1
+                    clra
+                    clrb
+                    std       PD.CP,y
+                    std       PD.CP+2,y
+                    lda       #FileLock
+                    sta       PE.Lock,x
+                    ldx       #$FFFF
+                    ldd       #$FFFF
+                    lbsr      L0B1B
+                    lbcs      RNCleanup
+                    endc
+                    lda       #DIR.!WRITE.
+                    lbsr      ChkAttrs
+                    lbcs      RNCleanup
+                    lbsr      Open1CE             also invalidates the buffer
+                    ldd       #64
+                    std       PD.CP+2,y
+                    lbsr      L0957
+RNScan              bcs       RNEndScan
+                    tst       ,x
+                    beq       RNNext
+                    leau      RNRec,s
+                    lbsr      RNCompare
+                    bcs       RNCheckNew
+                    ldd       PD.CP,y
+                    std       RNFound,s
+                    ldd       PD.CP+2,y
+                    std       RNFound+2,s
+                    inc       RNSeen,s
+                    bra       RNNext
+RNCheckNew          leau      RNNew,s
+                    lbsr      RNCompare
+                    bcc       RNExists
+RNNext              lbsr      L0942
+                    bra       RNScan
+RNEndScan           cmpb      #E$EOF
+                    bne       RNError
+                    tst       RNSeen,s
+                    beq       RNMissing
+                    lbsr      L1237
+                    bcs       RNCleanup
+                    ldd       RNFound,s
+                    std       PD.CP,y
+                    ldd       RNFound+2,s
+                    std       PD.CP+2,y
+                    lbsr      L0957
+                    bcs       RNCleanup
+* The validated field already has its final high bit and zero padding.
+* Copy all 29 name bytes without touching the three-byte FD pointer.
+                    leau      RNNew,s
+                    ldb       #29
+RNCopy              lda       ,u+
+                    sta       ,x+
+                    decb
+                    bne       RNCopy
+                    lbsr      L1205
+                    bra       RNCleanup
+RNExists            ldb       #E$CEF
+                    bra       RNError
+RNMissing           ldb       #E$PNNF
+                    bra       RNError
+RNError             orcc      #1
+RNCleanup           pshs      b,cc
+                    lbsr      L1237
+                    ifgt      Level-1
+                    pshs      y
+                    ldy       PD.Exten,y
+                    lbsr      L0ACF
+                    puls      y
+                    endc
+                    ldd       RNPos+2,s
+                    std       PD.CP,y
+                    ldd       RNPos+4,s
+                    std       PD.CP+2,y
+                    puls      b,cc
+RNDone              leas      RNWork,s
+                    puls      x,y,u,pc
+                    ifgt      Level-1
+RNBusy              ldb       #E$Share
+                    orcc      #1
+                    bra       RNDone
+                    endc
+RN.RBF              equ       1
+                    use       rename-name.d
 
                     emod
 eom                 equ       *

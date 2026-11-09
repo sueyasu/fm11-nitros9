@@ -9,6 +9,10 @@ WILDBITS_VTIO.D     SET       1
 
 * Constant definitions.
 KBufSz              EQU       8         the circular buffer size
+* SS.Ready counts head - tail modulo KBufSz with an AND, so it must be a power of two.
+                    ifne      KBufSz&(KBufSz-1)
+                    error     KBufSz must be a power of two
+                    endc
 
 * Driver static memory.
                     ORG       V.SCF
@@ -320,6 +324,13 @@ V.KSBuf             RMB       KBufSz
 V.WSigID            RMB       1         registrant's process ID, 0 = none
 V.WSigBg            RMB       1         signal code for going background
 V.WSigFg            RMB       1         signal code for coming forward
+* The text cursor (05 20-05 24).  The hardware holds one set ($FFD0,
+* $FFD2, $FFD3), so each terminal keeps its own here: vtio writes the
+* hardware only while the terminal is live, and grfdrv256's switch puts
+* the live terminal's back (CrsrPut).  GF.TermNew seeds the defaults.
+V.CrsrCtl           RMB       1         VKY_TXT_CURSOR_CTRL_REG: enable, flash rate
+V.CrsrChr           RMB       1         VKY_TXT_CURSOR_CHAR_REG
+V.CrsrCol           RMB       1         VKY_TXT_CURSOR_COLR_REG
                   ENDC
 * grfdrv256 SetBlkC2C3 maps the DSS through ONE MMU slot (slot 5).
 * Safe only while the whole area fits a single 256-byte page: F$SRqMem
@@ -334,7 +345,10 @@ V.WSigFg            RMB       1         signal code for coming forward
 V.Last              EQU       .
 
 * Borrow DP after D.IRQTmp; stays below $20 so it does not hit Level 2 D.Tasks.
-                    org       D.IRQTmp
+* D.IRQTmp itself is the kernel's: F$Move (fmove.asm) uses both bytes as
+* scratch, so the borrowed block starts after it (it used to start AT it,
+* and every F$Move overwrote D.Bell).
+                    org       D.IRQTmp+2
 D.Bell              rmb       2
 D.TnCnt             rmb       1
 D.OrgAlt            rmb       2
@@ -346,6 +360,9 @@ D.KySns             rmb       1
 * Level 1 already has D.KbdSta at $6D in os9.d.
 D.KbdSta            rmb       2
                   ENDC
+                    ifgt      .-$20
+                    error     the borrowed DP block runs past $1F into the Level 1/2 DP variables
+                    endc
 
 * K-specific section
 * Borrow 9 bytes from "CoCo" specific area of system globals for platform use.
@@ -383,7 +400,7 @@ F256Gfx             equ       $1200     ; F256-specific graphics data (256 bytes
 * screen as sprite records.
 *******************************************************************
                     org       F256Gfx
-gr.SprTbl           rmb       G.TermMax*8   ; one row per terminal, below
+gr.SprTbl           rmb       72        ; G.TermMax*8: one row per terminal, below (written out: see gr.MsTbl)
 gr.SprDirty         rmb       1         ; 0 = every sprite control byte is known clear
 * Row layout (org 0, like the terminal table's T.*)
                     org       0
@@ -397,6 +414,16 @@ SB.Size             equ       8
 
 SB.Reg              equ       %00000001 ; this terminal has registered a table
 SB.Span             equ       %00000010 ; it crosses into SB.Blk1
+* gr.MsTbl row layout
+                    org       0
+MT.Cfg              rmb       1         ; SS.MsCfg bits (MC.*), 0 = defaults
+MT.CfgID            rmb       1         ; process that set MT.Cfg, 0 = none
+MT.LastX            rmb       2         ; pointer X/Y when this terminal last went background
+MT.LastY            rmb       2
+MT.Flags            rmb       1         ; MF.*
+                    rmb       1         ; spare, keeps the row at 8
+MF.Saved            equ       %00000001 ; MT.LastX/Y hold a position: restore it on coming forward
+MF.Shown            equ       %00000010 ; the pointer was showing when it went background
 SPR.Max             equ       128       ; hardware sprite records
 SPR.RecL            equ       8         ; bytes each
 GrfMod              equ       $C000     ; Logical location of module in task 1
@@ -404,6 +431,30 @@ GrfMod              equ       $C000     ; Logical location of module in task 1
 *******************************************************************
 * GrfMem Offsets - Corrected for 8-byte DAT
 *******************************************************************
+*******************************************************************
+* The mouse driver's block (gr.MsDrv), one per machine: there is one
+* mouse.  mousedrv_ps2 registers F$IRQ with U = gr.MsDrv, so its
+* interrupt gets this block as U, owns no terminal's static and has an
+* F$IRQ entry of its own to remove (IOMan removes by U).  vtio's AltISR
+* and grfdrv read the buttons, timer and found flag directly.
+*******************************************************************
+                    org       0
+MD.Buttons          rmb       1         ; buttons 2=middle 1=right 0=left, the last packet's
+MD.Timer            rmb       1         ; auto-hide timer: mousedrv clears it, AltISR counts it
+MD.Found            rmb       1         ; non-zero = a mouse was found and its IRQ installed
+MD.MEMP             rmb       1         ; PS2_STAT empty bit of the mouse's channel
+MD.MS_IN            rmb       2         ; input register of the mouse's channel
+MD.M_WR             rmb       1         ; PS2_CTRL write bit of the mouse's channel
+MD.MCLR             rmb       1         ; PS2_CTRL FIFO clear bit of the mouse's channel
+MD.IntBit           rmb       1         ; INT_*_0 bit of the mouse's channel
+MD.Byte0            rmb       1         ; packet byte 0 (buttons, signs)
+MD.Byte1            rmb       1         ; packet byte 1 (X movement)
+MD.Byte2            rmb       1         ; packet byte 2 (Y movement)
+MD.ByteCnt          rmb       1         ; packet bytes received
+MD.PktLen           rmb       1         ; bytes per packet: 3, or 4 for a wheel mouse (IntelliMouse ID 3)
+MD.Wheel            rmb       1         ; wheel steps since the last live SS.MsWheel, signed, held at -128/+127
+MD.Size             equ       .
+
                     org       $1100
 gr.DATImg           RMB       16        ; GrfDrv DAT image (16 BYTES)
 gr.Stack            RMB       2         ; GrfDrv Stack pointer (2 bytes)
@@ -499,6 +550,42 @@ gr.d2               rmb       2         ; GF.Pal LUT bytes 2-3 / scroll end offs
 gr.b3               rmb       1         ; colour attr / PSG volume / BM ctrl byte
 gr.b4               rmb       1         ; WD.Buf (16K backup) / WD.Vicky ($C2/$C3)
 gr.b5               rmb       1         ; GF.Pal 0=FG 1=BG LUT select
+                    ifgt      .-F256Gfx
+                    error     GrfMem past $11FF - runs into F256Gfx
+                    endc
+
+*******************************************************************
+* The mouse globals live in the free part of the $1000 page (D.CCMem, the
+* CoCo's WGlobal), not in GrfMem.  The shared modules still use parts of
+* that page at the CoCo's offsets - scf G.GfBusy $1002 and G.GrfStk
+* $1007-$1008, clock/krnp2 G.AlPckt and G.AlPID $100F-$1015, clock
+* G.BelVec $1017-$1018, scf/init G.GrfEnt $106E-$106F - so these start at
+* $1080, and the checks below keep them inside $1080-$10FF.
+*******************************************************************
+                    org       $1080
+gr.MsDrv            rmb       MD.Size   ; mousedrv's block (MD.*, above); F$IRQ U for mousedrv
+gr.MSButtons        equ       gr.MsDrv+MD.Buttons
+gr.MSTimer          equ       gr.MsDrv+MD.Timer
+gr.MSFound          equ       gr.MsDrv+MD.Found
+gr.MSWheel          equ       gr.MsDrv+MD.Wheel
+* The mouse table: one 8-byte row per terminal (id * 8, as gr.TermTbl and
+* gr.SprTbl), MT.* below.  SS.MsCfg's setting, and the pointer position and
+* shown/hidden state a switch saves when the terminal goes background and
+* puts back when it comes forward (the position is also what a background
+* SS.Mouse returns).  vtio's AltISR
+* reads the live terminal's row (gr.LiveTerm); GF.TermNew clears a
+* terminal's row.  72 = G.TermMax*8,
+* written out as gr.TermTbl's is: G.TermMax is defined further down, so
+* an rmb on it reserves nothing on pass 1 (checked where G.TermMax is).
+gr.MsTbl            rmb       72
+gr.MsSpeed          rmb       1         ; mouse speed 1-MS.SpdMax (SS.MsCfg high byte), 0 = no mouse
+gr.CrsrCol          rmb       1         ; the core's text cursor colour, read once by GF.InitDisp: every new terminal's default
+                    ifgt      .-$1100
+                    error     the mouse globals run past $10FF into GrfMem
+                    endc
+                    iflt      gr.MsDrv-$1080
+                    error     the mouse globals start below $1080, on the shared modules' WGlobal offsets
+                    endc
                     org       0
 T.Flags             rmb       1         ; Acrive Flag - only one screen should be active
 T.Block             rmb       1
@@ -525,6 +612,10 @@ E$Param             equ       $05
 * Terminal Management Constants
 *******************************************************************
 G.TermMax           equ       9         ; Maximum terminals (0-8)
+* gr.SprTbl's and gr.MsTbl's rmb 72 (above) must cover a row per terminal.
+                    ifne      G.TermMax*8-72
+                    error     gr.SprTbl and gr.MsTbl are not G.TermMax rows of 8
+                    endc
 
 *******************************************************************
 * GrfDrv Function Codes
@@ -647,11 +738,14 @@ WD.Vicky            equ       1         ; live $C2/$C3 at LUT1 $2000/$4000
 * read-back (shadow copies)": the core keeps TEXT_FG_Shadow / TEXT_BG_Shadow
 * and returns them for $18_1700-$18_177F.  So this CAN go to 1 now, subject
 * to which bitstream is actually flashed - the same open question as the DMA
-* halt.  LEFT AT 0 DELIBERATELY: flipping it is a behaviour change to the
-* terminal switch path and wants a hardware run of its own.  See the open
-* item in docs/status.md.
+* halt.
+*
+* ON SINCE 2026-10-13: each terminal keeps its own text foreground and
+* background palettes across a switch.  Older cores, whose text LUT does not
+* read back, are not supported (upgrade the core): on those the capture
+* reads a dead palette and the screen goes black on black.
 TermSaveFont0       equ       1         font bank 0     - CONFIRMED works
-TermSaveTextLUT     equ       0         text LUT fg/bg  - BROKEN before the FPGA fix
+TermSaveTextLUT     equ       1         text LUT fg/bg  - needs a core with text LUT read-back
 * TermSaveSprite0 is gone with T.SPRITE0: PushBuf no longer reads the
 * sprite registers back, and PullBuf fills them from the incoming
 * terminal's registered table.
@@ -675,12 +769,17 @@ T.FLUT              rmb       64        ; foreground LUT
 T.BLUT              rmb       64        ; background LUT
 * T.SPRITE0 (512 bytes) was here.  Sprite records are no longer shadowed
 * per terminal: the program owns the only copy and registers it
-* (gr.SprTbl above).  The 512 bytes are free at the end of the buffer.
+* (gr.SprTbl above).  Half of the 512 bytes is now T.MSPTR.
 T.FONT0             rmb       2048
 T.CLUT0             rmb       1024      ; CLUT 0 Copy
 T.CLUT1             rmb       1024      ; CLUT 1 Copy
 T.CLUT2             rmb       1024      ; CLUT 2 Copy
 T.CLUT3             rmb       1024      ; CLUT 3 Copy
+* The terminal's mouse pointer, 16x16 at 8 bits: what PullBuf copies to
+* VICKY_BLK+$0C00.  GF.TermNew draws the default arrow here and
+* SS.MsPtr replaces it; nothing reads the pointer memory back.  The
+* last 256 bytes of the buffer are free.
+T.MSPTR             rmb       256       ; mouse pointer image
 
 * SS.KySns bit locations
 SHIFTBIT            equ       %00000001
