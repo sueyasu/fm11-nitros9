@@ -778,6 +778,26 @@ KrnBlock            aslb                ; B <= 1 (hi bit goes into carry, 0 goes
 * screen block by setting RAMinUse on it. $3E stays reserved as the block
 * DAT.Free maps unused slots to. Bt.Block ($3B) is then marked RAMinUse
 * below. X=D.BlkMap here.
+                  IFNE    fm11
+* FM-11: B is the number of installed 8 KiB physical blocks (16..128).
+* Mark only the absent blocks in the legacy 64-block ($200..$23F)
+* bitmap area.  The block map's high-water mark was already set to
+* $0200+B, so these marks are defensive; never write past $023F.
+*
+* The upstream CoCo mask/count calculation below is not valid for a
+* 384 KiB system (B=$30): it would underflow B and overwrite the
+* system dispatch table beginning at $0300.
+                    cmpb      #$40
+                    bhs       FM11RAMMapDone
+                    abx                 ; first absent block at D.BlkMap+B
+                    lda       #NotRAM
+FM11MarkNotRAM      sta       ,x+
+                    incb
+                    cmpb      #$40
+                    blo       FM11MarkNotRAM
+FM11RAMMapDone      ldx       <D.BlkMap ; subsequent code expects map base
+                    clrb                ; subsequent code expects B=0
+                  ELSE
                   IFNE    immunity ; begin conditional assembly for immunity
                     leax      $38,x     ; first motherboard block
                     ldd       #NotRAM*256+7 ; reserve 7 blocks, $38-$3E
@@ -808,6 +828,8 @@ l@                  sta       ,x+       ; mark them all
 *]]] i-MMU-nity PORT
 
                   ENDC
+
+                  ENDC              ; FM-11-specific absent-RAM map handling
 
 * ASSUME: however we got here, B=0
 Mc09KrnStart
