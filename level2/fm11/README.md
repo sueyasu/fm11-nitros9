@@ -45,6 +45,32 @@ The kernel image therefore remains below $FC00.  The partial visibility of
 logical block 7 is an FM-11-specific constraint and is handled separately
 from the 8 KiB DAT abstraction.
 
+## Installed RAM detection (128 KiB to 1 MiB)
+
+FM-11 Level 2 probes installed RAM by mapping each 8 KiB OS physical
+block into the temporary MMR page pair and checking for aliasing to
+block 0.  The emulator accepts 128, 256, 384, 512, 640, 768, 896,
+and 1024 KiB, corresponding to 16..128 OS blocks.
+
+The FM-11-specific section of `level2/modules/kernel/krn.asm` now
+marks absent blocks only within the original 64-block bitmap area
+(`D.BlkMap + installed_blocks` through `D.BlkMap + $3F`) when RAM is
+smaller than 512 KiB.  It leaves the bitmap base register X and B=0
+for subsequent kernel initialization.  This avoids the old CoCo
+marking loop, whose 8-bit subtraction wrapped for 384 KiB and wrote
+through the system service dispatch table at $0300.
+
+Run the source-level range regression with:
+
+```sh
+python3 scripts/fm11/test-l2-ram-map.py
+```
+
+To confirm the actual guest behavior, rebuild a Level 2 image and boot
+it with `[memory] ram_kib = 384` in the FM-11 emulator configuration.
+Also check 128, 256, 512, 640, 768, 896 and 1024 KiB with `mfree`.
+The test script is a model, not a substitute for guest execution.
+
 ## Initial bring-up model
 
 The first bring-up uses hardware task 0 for the system map and hardware
