@@ -695,19 +695,49 @@ KrnRsvWin           inc       ,x+       ; mark this page as used
 
                   IFNE    fm11
 * FM-11 hardware pages are 4 KiB while the kernel block map is 8 KiB.
-* Probe one 8 KiB block at a time by mapping the corresponding page pair
-* into logical block 5 ($A000-$BFFF). At 1 MiB block $80 folds to pages
-* $00/$01 and therefore aliases block 0; smaller memories ghost earlier.
+* Test each 8 KiB page pair through logical block 5 ($A000-$BFFF).
+* An absent page may be an unwritable/open bus rather than an alias:
+* require successful reads of both 55h and AAh, and check that neither
+* write modifies the physical block-0 map byte (the alias sentinel).
+* Restore both the probe byte and sentinel after EVERY attempt, so a
+* wrapped probe cannot leave the block map or live RAM corrupted.
+*
+* Block 0 is reserved explicitly; the old mirror-only test marked it
+* implicitly by writing 01h to a mirror of this location.
+                    lda       #RAMinUse
+                    sta       ,x
                     ldb       #$08
 FM11KrnBlock        tfr       b,a
                     lbsr      FM11Map5
-                    lda       #$01
+                    lda       >-$6000,x
+                    pshs      a         ; original candidate byte
+                    lda       ,x
+                    pshs      a         ; original block-0 sentinel
+                    lda       #$55
                     sta       >-$6000,x
+                    cmpa      >-$6000,x
+                    bne       FM11KrnProbeFail
                     cmpa      ,x
-                    beq       FM11KrnSizeDone
+                    beq       FM11KrnProbeFail
+                    lda       #$AA
+                    sta       >-$6000,x
+                    cmpa      >-$6000,x
+                    bne       FM11KrnProbeFail
+                    cmpa      ,x
+                    beq       FM11KrnProbeFail
+* Two patterns read back correctly and the block-0 sentinel is intact.
+                    puls      a
+                    sta       ,x
+                    puls      a
+                    sta       >-$6000,x
                     incb
                     cmpb      #$81
                     bne       FM11KrnBlock
+                    bra       FM11KrnSizeDone
+FM11KrnProbeFail    puls      a
+                    sta       ,x
+                    puls      a
+                    sta       >-$6000,x
 FM11KrnSizeDone     stb       <D.MemSz
                     clra
                     pshs      x
