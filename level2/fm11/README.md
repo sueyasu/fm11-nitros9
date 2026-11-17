@@ -48,9 +48,23 @@ from the 8 KiB DAT abstraction.
 ## Installed RAM detection (128 KiB to 1 MiB)
 
 FM-11 Level 2 probes installed RAM by mapping each 8 KiB OS physical
-block into the temporary MMR page pair and checking for aliasing to
-block 0.  The emulator accepts 128, 256, 384, 512, 640, 768, 896,
-and 1024 KiB, corresponding to 16..128 OS blocks.
+block into the temporary MMR page pair. Each probe now performs a
+**two-pattern write/readback check (55h and AAh)** and verifies that
+neither write has changed the physical block-0 sentinel. A failed
+readback **or** a detected alias terminates the RAM scan. Both the
+candidate byte and the block-0 sentinel are saved and restored on
+every attempt, including alias termination. Block 0 is reserved
+explicitly rather than as a side effect of alias detection.
+
+The emulator accepts 128, 256, 384, 512, 640, 768, 896, and 1024 KiB,
+corresponding to 16..128 OS blocks. The 8 KiB probe also recognizes
+intermediate installed sizes (such as 192 KiB) if the hardware makes
+these physically contiguous and visible through the MMR.
+
+**Hardware caveat:** Open bus memory returning fixed zero or FFh is now
+rejected. Certain unusual decoders may still appear writable even
+without actual RAM, so validation with real FM-11 expansion hardware
+remains necessary.
 
 The FM-11-specific section of `level2/modules/kernel/krn.asm` now
 marks absent blocks only within the original 64-block bitmap area
@@ -64,6 +78,7 @@ Run the source-level range regression with:
 
 ```sh
 python3 scripts/fm11/test-l2-ram-map.py
+python3 scripts/fm11/test-l2-ram-probe.py
 ```
 
 To confirm the actual guest behavior, rebuild a Level 2 image and boot
