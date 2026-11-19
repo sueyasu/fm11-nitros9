@@ -36,7 +36,7 @@ HD2TotalSectors     equ       77*HD2SectorsPerCyl
 FormatTrackBytes    equ       $28E7
 
 rev                 set       $01
-edition             set       5
+edition             set       6
 tylg                set       Sbrtn+Objct
 atrv                set       ReEnt+rev
 
@@ -47,7 +47,6 @@ atrv                set       ReEnt+rev
 V.LocalSect         rmb       3
 V.LocalCnt          rmb       1
 V.LocalBuf          rmb       2
-
 V.CylPos            rmb       4                   physical cylinders; $FF unknown
 
 name                fcs       /llfm11/
@@ -81,7 +80,7 @@ ll_term             clrb
 ********************************************************************
 SetupCHS            lda       PD.DRV,y
                     cmpa      #2
-                    lblo       Setup2D
+                    blo       Setup2D
                     cmpa      #4
                     lblo       Setup2HD
                     lbra       BadUnit
@@ -94,17 +93,17 @@ Setup2D             tst       V.LocalSect,u
 
                     clra
 S2_Cyl              cmpx      #D2SectorsPerCyl
-                    lblo       S2_GotCyl
+                    blo       S2_GotCyl
                     leax      -D2SectorsPerCyl,x
                     inca
-                    lbra       S2_Cyl
+                    bra       S2_Cyl
 S2_GotCyl           lbsr      SeekCylinder
                     lbcs      SeekReadError
                     cmpx      #D2SectorsPerSide
-                    lblo       S2_Side0
+                    blo       S2_Side0
                     leax      -D2SectorsPerSide,x
                     ldb       #1
-                    lbra       S2_GotSide
+                    bra       S2_GotSide
 S2_Side0            clrb
 S2_GotSide          stb       >FM11_MFDC_SIDE
                     tfr       x,d
@@ -124,17 +123,17 @@ Setup2HD            tst       V.LocalSect,u
 
                     clra
 SH_Cyl              cmpx      #HD2SectorsPerCyl
-                    lblo       SH_GotCyl
+                    blo       SH_GotCyl
                     leax      -HD2SectorsPerCyl,x
                     inca
-                    lbra       SH_Cyl
+                    bra       SH_Cyl
 SH_GotCyl           lbsr      SeekCylinder
                     lbcs      SeekReadError
                     cmpx      #HD2SectorsPerSide
-                    lblo       SH_Side0
+                    blo       SH_Side0
                     leax      -HD2SectorsPerSide,x
                     ldb       #1
-                    lbra       SH_GotSide
+                    bra       SH_GotSide
 SH_Side0            clrb
 SH_GotSide          stb       >FM11_FDC_SIDE
                     tfr       x,d
@@ -157,9 +156,9 @@ BadSector           orcc      #Carry
 
 * Advance local physical sector and buffer by one 256-byte sector.
 Advance             inc       V.LocalSect+2,u
-                    lbcc       LL_ADVBUF
+                    bcc       LL_ADVBUF
                     inc       V.LocalSect+1,u
-                    lbcc       LL_ADVBUF
+                    bcc       LL_ADVBUF
                     inc       V.LocalSect,u
 LL_ADVBUF           inc       V.LocalBuf,u        +$0100
                     rts
@@ -170,7 +169,7 @@ LL_ADVBUF           inc       V.LocalBuf,u        +$0100
 ********************************************************************
 ReadSector          lda       PD.DRV,y
                     cmpa      #2
-                    lbhs       Read2HD
+                    bhs       Read2HD
 
 Read2D              ldx       V.LocalBuf,u
                     clr       >FM11_DMA0_ADDR_H
@@ -189,7 +188,7 @@ Read2D              ldx       V.LocalBuf,u
                     lbsr      WaitMiniFDC
                     lbcs      ReadError
                     bita      #FM11_MFDC_ERRMASK
-                    lbne      ReadError
+                    bne       ReadError
                     clrb
                     andcc     #^Carry
                     rts
@@ -211,12 +210,12 @@ Read2HD             ldx       V.LocalBuf,u
                     lbsr      WaitStdFDC
                     lbcs      ReadError
                     bita      #FM11_FDC_ERRMASK
-                    lbne      ReadError
+                    bne       ReadError
                     clrb
                     andcc     #^Carry
                     rts
 
-ReadError           lbsr      DiskIOFailed
+ReadError           lbsr      InvalidateCylinder
                     orcc      #Carry
                     ldb       #E$Read
                     rts
@@ -226,7 +225,7 @@ ReadError           lbsr      DiskIOFailed
 ********************************************************************
 WriteSector         lda       PD.DRV,y
                     cmpa      #2
-                    lbhs       Write2HD
+                    bhs       Write2HD
 
 Write2D             ldx       V.LocalBuf,u
                     clr       >FM11_DMA0_ADDR_H
@@ -292,19 +291,19 @@ Write2D256Diag      ldx       V.LocalBuf,u
                     lbsr      WaitMiniFDC
                     lbcs      W2D_FDCErr
                     bita      #FM11_MFDC_ERRMASK
-                    lbne      W2D_FDCErr
+                    bne       W2D_FDCErr
                     clrb
                     andcc     #^Carry
                     rts
-W2D_DMAErr          lbsr      DiskIOFailed
+W2D_DMAErr          lbsr      InvalidateCylinder
                     ldb       #$01
                     orcc      #Carry
                     rts
-W2D_DMANotDone      lbsr      DiskIOFailed
+W2D_DMANotDone      lbsr      InvalidateCylinder
                     ldb       #$02
                     orcc      #Carry
                     rts
-W2D_FDCErr          lbsr      DiskIOFailed
+W2D_FDCErr          lbsr      InvalidateCylinder
                     tfr       a,b
                     orcc      #Carry
                     rts
@@ -323,24 +322,24 @@ Write2HD128         ldx       V.LocalBuf,u
                     lbsr      WaitStdFDC
                     lbcs      W128_FDCErr
                     bita      #FM11_FDC_ERRMASK
-                    lbne      W128_FDCErr
+                    bne       W128_FDCErr
                     clrb
                     andcc     #^Carry
                     rts
-W128_DMAErr         lbsr      DiskIOFailed
+W128_DMAErr         lbsr      InvalidateCylinder
                     ldb       #$01                diagnostic: DMA error
                     orcc      #Carry
                     rts
-W128_DMANotDone     lbsr      DiskIOFailed
+W128_DMANotDone     lbsr      InvalidateCylinder
                     ldb       #$02                diagnostic: DMA did not complete
                     orcc      #Carry
                     rts
-W128_FDCErr         lbsr      DiskIOFailed
+W128_FDCErr         lbsr      InvalidateCylinder
                     tfr       a,b                 return raw FDC status to Cobbler
                     orcc      #Carry
                     rts
 
-WriteError          lbsr      DiskIOFailed
+WriteError          lbsr      InvalidateCylinder
                     orcc      #Carry
                     ldb       #E$Write
                     rts
@@ -358,12 +357,12 @@ ll_read             lda       V.PhysSect,u
                     stx       V.LocalBuf,u
 
 LL_RDLOOP           lbsr      SetupCHS
-                    lbcs       LL_RDEXIT
+                    bcs       LL_RDEXIT
                     lbsr      ReadSector
-                    lbcs       LL_RDEXIT
+                    bcs       LL_RDEXIT
                     lbsr      Advance
                     dec       V.LocalCnt,u
-                    lbne       LL_RDLOOP
+                    bne       LL_RDLOOP
                     clrb
                     andcc     #^Carry
 LL_RDEXIT           rts
@@ -378,12 +377,12 @@ ll_write            lda       V.PhysSect,u
                     stx       V.LocalBuf,u
 
 LL_WRLOOP           lbsr      SetupCHS
-                    lbcs       LL_WREXIT
+                    bcs       LL_WREXIT
                     lbsr      WriteSector
-                    lbcs       LL_WREXIT
+                    bcs       LL_WREXIT
                     lbsr      Advance
                     dec       V.LocalCnt,u
-                    lbne       LL_WRLOOP
+                    bne       LL_WRLOOP
                     clrb
                     andcc     #^Carry
 LL_WREXIT           rts
@@ -394,7 +393,7 @@ LL_WREXIT           rts
 ll_getstat          ldx       PD.RGS,y
                     lda       R$B,x
                     cmpa      #SS.DSize
-                    lbne       gs_unknown
+                    bne       gs_unknown
 * B=0 selects LBA-style return: A=sector size in 256-byte units,
 * X:Y=32-bit physical-sector count.
                     lda       #1
@@ -405,9 +404,9 @@ ll_getstat          ldx       PD.RGS,y
                     std       R$X,x
                     lda       PD.DRV,y
                     cmpa      #2
-                    lbhs       gs_2hd
+                    bhs       gs_2hd
                     ldd       #D2TotalSectors
-                    lbra       gs_size
+                    bra       gs_size
 
 gs_2hd              cmpa      #4
                     lbhs      BadUnit
@@ -464,7 +463,7 @@ ll_ipl              ldx       PD.RGS,y
                     sta       V.LocalCnt,u
                     lda       PD.DRV,y
                     cmpa      #2
-                    lbhs       LIPL_2HD
+                    bhs       LIPL_2HD
 
 LIPL_2D             sta       >FM11_MFDC_DRIVE
                     clra
@@ -474,11 +473,11 @@ LIPL_2D             sta       >FM11_MFDC_DRIVE
                     lda       #1
                     sta       >FM11_MFDC_SECTOR
 LIPL_2DLoop         lbsr      Write2D256Diag
-                    lbcs       LIPL_Exit
+                    bcs       LIPL_Exit
                     inc       V.LocalBuf,u
                     inc       >FM11_MFDC_SECTOR
                     dec       V.LocalCnt,u
-                    lbne       LIPL_2DLoop
+                    bne       LIPL_2DLoop
                     lbra      ss_ok
 
 LIPL_2HD            cmpa      #4
@@ -492,13 +491,13 @@ LIPL_2HD            cmpa      #4
                     lda       #1
                     sta       >FM11_FDC_SECTOR
 LIPL_2HDLoop        lbsr      Write2HD128
-                    lbcs       LIPL_Exit
+                    bcs       LIPL_Exit
                     ldd       V.LocalBuf,u
                     addd      #$0080
                     std       V.LocalBuf,u
                     inc       >FM11_FDC_SECTOR
                     dec       V.LocalCnt,u
-                    lbne       LIPL_2HDLoop
+                    bne       LIPL_2HDLoop
                     lbra      ss_ok
 LIPL_Exit           rts
 
@@ -519,7 +518,7 @@ ll_boottrack        ldx       PD.RGS,y
                     sta       V.LocalCnt,u
                     lda       PD.DRV,y
                     cmpa      #2
-                    lbhs       LBT_2HD
+                    bhs       LBT_2HD
 
 LBT_2D              sta       >FM11_MFDC_DRIVE
                     clra
@@ -528,20 +527,20 @@ LBT_2D              sta       >FM11_MFDC_DRIVE
                     clr       >FM11_MFDC_SIDE
                     lda       #5
                     sta       >FM11_MFDC_SECTOR
-LBT_2DLoop           lbsr      WriteSector
+LBT_2DLoop           lbsr      Write2D
                     lbcs       LBT_Exit
                     inc       V.LocalBuf,u
                     inc       >FM11_MFDC_SECTOR
                     lda       >FM11_MFDC_SECTOR
                     cmpa      #17
-                    lblo       LBT_2DNext
+                    blo       LBT_2DNext
                     lda       #1
                     sta       >FM11_MFDC_SECTOR
                     lda       >FM11_MFDC_SIDE
                     eora      #1
                     sta       >FM11_MFDC_SIDE
 LBT_2DNext           dec       V.LocalCnt,u
-                    lbne       LBT_2DLoop
+                    bne       LBT_2DLoop
                     lbra      ss_ok
 
 LBT_2HD             cmpa      #4
@@ -555,12 +554,12 @@ LBT_2HD             cmpa      #4
                     sta       >FM11_FDC_SIDE
                     lda       #1
                     sta       >FM11_FDC_SECTOR
-LBT_2HDLoop          lbsr      WriteSector
-                    lbcs       LBT_Exit
+LBT_2HDLoop          lbsr      Write2HD
+                    bcs       LBT_Exit
                     inc       V.LocalBuf,u
                     inc       >FM11_FDC_SECTOR
                     dec       V.LocalCnt,u
-                    lbne       LBT_2HDLoop
+                    bne       LBT_2HDLoop
                     lbra      ss_ok
 
 LBT_Exit             rts
@@ -577,7 +576,7 @@ LBT_Exit             rts
 ********************************************************************
 ll_writetrack       lda       PD.DRV,y
                     cmpa      #2
-                    lbhs       LWT_2HD
+                    bhs       LWT_2HD
 
 LWT_2D              ldx       PD.RGS,y
                     lda       R$U+1,x
@@ -603,7 +602,7 @@ LWT_2D              ldx       PD.RGS,y
                     lbsr      WaitMiniFDC
                     lbcs      LWT_Error
                     bita      #FM11_MFDC_ERRMASK
-                    lbne      LWT_Error
+                    lbne       LWT_Error
                     lbra      ss_ok
 
 LWT_2HD             cmpa      #4
@@ -634,10 +633,10 @@ LWT_2HD             cmpa      #4
                     lbsr      WaitStdFDC
                     lbcs      LWT_Error
                     bita      #FM11_FDC_ERRMASK
-                    lbne      LWT_Error
+                    bne       LWT_Error
                     lbra      ss_ok
 
-LWT_Error           lbsr      DiskIOFailed
+LWT_Error           lbsr      InvalidateCylinder
                     orcc      #Carry
                     ldb       #E$Write
                     rts
@@ -645,7 +644,6 @@ LWT_Error           lbsr      DiskIOFailed
 ss_ok               clrb
                     andcc     #^Carry
                     rts
-
 
 ********************************************************************
 * SeekCylinder - A=target cylinder, U=private statics, Y=path.
@@ -655,7 +653,7 @@ ss_ok               clrb
 SeekCylinder        pshs      a,x,y
                     ldb       PD.DRV,y
                     cmpb      #4
-                    bhs       SeekBadUnit
+                    lbhs       SeekBadUnit
                     leax      V.CylPos,u
                     leax      b,x
                     cmpb      #2
@@ -672,7 +670,7 @@ SeekSelect          stb       5,y
                     lda       ,x
                     bpl       SeekKnown
                     lda       #FM11_FDC_RESTORE_NOVERIFY
-                    bsr       Type1Command
+                    lbsr       Type1Command
                     bcs       SeekFail
                     clra
                     sta       ,x
@@ -694,7 +692,6 @@ SeekFail            lda       #$FF
                     ldb       #E$Write
                     orcc      #Carry
                     puls      a,x,y
-                    lbsr      DiskIOFailed
                     rts
 SeekBadUnit         ldb       #E$Unit
                     orcc      #Carry
@@ -750,26 +747,6 @@ InvalidateCylinder  pshs      d,x,cc
                     sta       b,x
 InvDone             puls      d,x,cc,pc
 
-* Stop the DMA channel before returning or freeing a bounce buffer.
-* Force interrupt aborts a controller command that may still be BUSY.
-* Preserve diagnostic status/error registers.
-DiskIOFailed        pshs      d,cc
-                    lbsr      InvalidateCylinder
-                    lda       PD.DRV,y
-                    cmpa      #2
-                    bhs       DiskFailStd
-                    clr       >FM11_DMA0_MODE
-                    lda       #$D0
-                    sta       >FM11_MFDC_CMD
-                    lda       >FM11_MFDC_STATUS
-                    bra       DiskFailDone
-DiskFailStd         cmpa      #4
-                    bhs       DiskFailDone
-                    clr       >FM11_DMA1_MODE
-                    lda       #$D0
-                    sta       >FM11_FDC_CMD
-                    lda       >FM11_FDC_STATUS
-DiskFailDone        puls      d,cc,pc
 
 
 WaitDMA0            pshs      x
