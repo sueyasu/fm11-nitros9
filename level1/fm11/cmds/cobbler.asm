@@ -554,7 +554,7 @@ FMCobTargetHD       leax      >FMIPLHDName,pcr
                     ldb       #SS.FM11HDBoot
                     os9       I$SetStt
                     lbcs      WriteBad
-                    bra       FMCobClose
+                    lbra      FMCobClose
 FMCobTarget2D       ldd       <u0034+2,u
                     cmpd      #16
                     lbne      FMTypeBad
@@ -574,6 +574,28 @@ FMCobWriteIPL       ldy       #1024
                     lbsr      FMReadAsset
                     lbcs      FMAssetBad
                     lda       <devpath
+                    ifeq      Level-1
+* Diagnostic only: two independent SetStat calls for Level 1 2HD.
+* Reload X from the original buffer rather than trusting returned registers.
+                    ldd       <u0034,u
+                    cmpd      #77
+                    bne       FMCobWholeBoot
+                    leax      >FMFileBuf,u
+                    ldy       #$010A              S1, 10 sectors
+                    lda       <devpath
+                    ldb       #SS.FM11BootPart
+                    os9       I$SetStt
+                    lbcs      WriteBad
+                    leax      >FMFileBuf+$0A00,u
+                    ldy       #$0B07              S11, 7 sectors
+                    lda       <devpath
+                    ldb       #SS.FM11BootPart
+                    os9       I$SetStt
+                    lbcs      WriteBad
+                    bra       FMCobClose
+FMCobWholeBoot      leax      >FMFileBuf,u
+                    lda       <devpath
+                    endc
                     ldb       #SS.FM11Boot
                     os9       I$SetStt
                     lbcs      WriteBad

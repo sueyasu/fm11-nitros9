@@ -108,5 +108,6 @@ SS.FM11Boot         EQU       $90        * Cobbler: write S5.. boottrack
 SS.FM11IPL          EQU       $91        * Format/Cobbler: write reserved ROM IPL slots
 SS.FM11HDIPL        EQU       $92        * HDD: write physical sectors 0-1 ROM IPL
 SS.FM11HDBoot       EQU       $93        * HDD: write physical sectors 2-18 Bootp1
+SS.FM11BootPart     EQU       $94        * L1 diagnostic: 2HD T0/H1, X=buffer, Y=start:count
 * 2D: S1-S2 are ROM-loaded (2 x 256); S3-S4 stay reserved by the current
 *     NitrOS-9 layout.  2HD: S1-S4 are ROM-loaded (4 x 128).

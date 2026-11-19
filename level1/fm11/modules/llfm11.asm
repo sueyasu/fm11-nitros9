@@ -430,6 +430,8 @@ ll_setstat          ldx       PD.RGS,y
                     lbeq      ll_writetrack
                     cmpa      #SS.FM11Boot
                     lbeq      ll_boottrack
+                    cmpa      #SS.FM11BootPart
+                    lbeq      ll_bootpart
                     cmpa      #SS.FM11IPL
                     lbeq      ll_ipl
                     orcc      #Carry
@@ -543,7 +545,9 @@ LBT_2DNext           dec       V.LocalCnt,u
                     bne       LBT_2DLoop
                     lbra      ss_ok
 
-LBT_2HD             cmpa      #4
+LBT_2HD             ldb       #1
+                    stb       V.LocalSect,u      starting sector for legacy full write
+LBT_2HDSelected     cmpa      #4
                     lbhs      BadUnit
                     suba      #2
                     sta       >FM11_FDC_DRIVE
@@ -552,7 +556,7 @@ LBT_2HD             cmpa      #4
                     lbcs      SeekWriteError
                     lda       #1
                     sta       >FM11_FDC_SIDE
-                    lda       #1
+                    lda       V.LocalSect,u
                     sta       >FM11_FDC_SECTOR
 LBT_2HDLoop          lbsr      WriteSector
                     bcs       LBT_Exit
@@ -563,6 +567,34 @@ LBT_2HDLoop          lbsr      WriteSector
                     lbra      ss_ok
 
 LBT_Exit             rts
+
+* Diagnostic SS.FM11BootPart: 2HD only, physical T0/H1.
+* R$X = buffer; R$Y high = first sector (1..17), low = count (1..17).
+* Reuse the exact existing WriteSector loop and completion waits.
+ll_bootpart         lda       PD.DRV,y
+                    cmpa      #2
+                    lblo      BadUnit
+                    cmpa      #4
+                    lbhs      BadUnit
+                    ldx       PD.RGS,y
+                    ldd       R$Y,x
+                    tsta
+                    lbeq      BadSector
+                    cmpa      #17
+                    lbhi      BadSector
+                    tstb
+                    lbeq      BadSector
+                    cmpb      #17
+                    lbhi      BadSector
+                    sta       V.LocalSect,u
+                    stb       V.LocalCnt,u
+                    adda      V.LocalCnt,u
+                    cmpa      #18
+                    lbhi      BadSector
+                    ldx       R$X,x
+                    stx       V.LocalBuf,u
+                    lda       PD.DRV,y
+                    lbra      LBT_2HDSelected
 
 ********************************************************************
 * SS.WTrk - write one complete format track image.
