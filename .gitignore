@@ -34,6 +34,7 @@ helpmsg
 
 # usim09pt FRAM persistence file (emulator artifact, holds reset vector)
 picothing.fram
+recipes/coco3/games/.build/
 *.d88
 *.rbf
 *.bin

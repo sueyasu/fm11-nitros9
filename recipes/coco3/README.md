@@ -39,6 +39,7 @@ From the repository root, ensure:
 - [`dw/`](dw/) builds a CoCo 3 DriveWire-oriented disk image
 - [`dw_bitbanger_rfm/`](dw_bitbanger_rfm/) boots an RFM-only system through the CoCo serial port
 - [`dw_becker_rfm/`](dw_becker_rfm/) boots the same host-file layout through the Becker TCP port
+- [`games/`](games/README.md) builds and tests selected games with `GAME=...`
 - [`dw_mega/`](dw_mega/) builds an expanded CoCo 3 DriveWire image with third-party software
 
 Automated RFM test recipes are separate from the normal transport recipes:
@@ -52,6 +53,17 @@ Each build directory keeps intermediate artifacts local:
 - `.lib/` static libraries
 
 ## Level 2 Floppy Build ([`coco3/floppy`](floppy/))
+
+The shared CoCo 3 rules support both CPUs, defaulting to `CPU=6809`.
+For a Hitachi 6309 build, use the same recipe:
+
+```sh
+make -C floppy clean
+make -C floppy CPU=6309
+```
+
+Clean before switching CPUs: intermediate files and disk image names are shared
+between CPU variants. This replaces the former `recipes/coco3_6309/40d` recipe.
 
 ```sh
 cd floppy
@@ -123,7 +135,9 @@ Primary output:
 In addition to the normal recipe prerequisites, this build needs `git`, CMOC,
 and the CMOC OS-9 runtime. By default it expects the usual coco-shelf layout:
 `bin/cmoc` and `cmoc_os9/` alongside the `nitros9/` checkout. Set
-`COCO_SHELF=/path/to/coco-shelf` if yours differs.
+`COCO_SHELF=/path/to/coco-shelf` if yours differs. Without a `bin/cmoc` there,
+it uses the `cmoc` on the `PATH`, or set `CMOC=/path/to/cmoc`. `cmoc_os9/` is
+still needed, with its `libc.a` built first: `make -C cmoc_os9/lib libc.a`.
 
 The mega recipe extends the existing [`dw/`](dw/) recipe and adds OS-9
 software and story files fetched from pinned upstream revisions:
@@ -182,7 +196,31 @@ make INFOCOM_STORY_DIR=/path/to/stories \
 ## Notes
 
 - Shared CoCo 3 build logic is in [`coco3.mak`](coco3.mak).
-- Game-specific recipes, including Sierra AGI support, are maintained in
-  [nitros9-games](https://github.com/nitros9project/nitros9-games).
+- Game disk images and MAME startup checks use [`games/`](games/README.md).
+  Game sources and compilation rules live in the sibling `nitros9-games` checkout.
 - This recipe targets a practical default CoCo 3 floppy boot configuration.
 - Use `recipe.mak` to extend command/module selections without editing shared makefiles.
+
+## GitHub MAME Boot Tests
+
+The **Build** workflow includes an optional `mame-smoke` job. It runs only
+when started manually; pushes and pull requests run the existing build checks.
+From GitHub Actions, select **Build → Run workflow**, or use:
+
+```sh
+gh workflow run build.yml --ref main
+gh run list --workflow build.yml
+gh run watch RUN_ID
+```
+
+The job installs Ubuntu's MAME package and Xvfb, downloads checksum-verified
+ROM archives from the Color Computer Archive, and boots freshly built 6809
+and 6309 floppy images using `coco3` and `coco3h`. Each guest must write its
+expected marker file through the OS-9 shell to pass. This exercises boot,
+shell execution, and floppy writes; it does not cover the full OS command set.
+The startup used for testing omits the interactive time prompt.
+
+The job has a 20-minute limit, with each emulator invocation limited to three
+wall-clock minutes and 90 emulated seconds. The `mame-boot-results` artifact
+contains build logs, ROM audits, emulator version/output, screenshots, and test
+disks, retained for seven days. ROM archives are not uploaded.

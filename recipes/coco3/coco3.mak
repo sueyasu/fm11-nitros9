@@ -116,7 +116,11 @@ BASIC09_SAMPLES ?=
 RECIPE_DEPS ?=
 
 RECIPE_OUTPUTS ?= $(DSKIMAGE)
-all: libs $(RECIPE_OUTPUTS)
+# The libraries come first: modules link against them, and under make -j
+# nothing else orders the two.
+all:
+	$(MAKE) libs
+	$(MAKE) $(RECIPE_OUTPUTS)
 
 LIB_NAMES = $(NOS9_LIB) libnet.a libalib.a $(COCO3_LIB)
 ifeq ($(FUJINET),1)
@@ -187,6 +191,12 @@ $(MODDIR)/xmode: xmode.asm | $(MODDIR)
 
 $(MODDIR)/tmode: xmode.asm | $(MODDIR)
 	$(AS) $(AFLAGS) $< $(ASOUT)$@ -DTMODE=1
+
+$(MODDIR)/basic09: $(LANGUAGES)/basic09/basic09_$(CPU) | $(MODDIR)
+	$(CP) $< $@
+
+$(LANGUAGES)/basic09/basic09_$(CPU):
+	$(MAKE) -C $(LANGUAGES)/basic09 basic09_$(CPU)
 
 $(MODDIR)/runb: $(LANGUAGES)/basic09/runb_$(CPU) | $(MODDIR)
 	$(CP) $< $@
