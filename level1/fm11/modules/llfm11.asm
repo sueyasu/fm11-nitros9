@@ -36,7 +36,7 @@ HD2TotalSectors     equ       77*HD2SectorsPerCyl
 FormatTrackBytes    equ       $28E7
 
 rev                 set       $01
-edition             set       5
+edition             set       6
 tylg                set       Sbrtn+Objct
 atrv                set       ReEnt+rev
 
@@ -183,12 +183,10 @@ Read2D              ldx       V.LocalBuf,u
                     lda       #FM11_MFDC_READSEC
                     sta       >FM11_MFDC_CMD
 
-                    lda       >FM11_DMA0_MODE
-                    bita      #FM11_DMA_ERROR
-                    lbne       ReadError
-                    bita      #FM11_DMA_DONE
-                    lbeq       ReadError
-                    lda       >FM11_MFDC_STATUS
+                    lbsr      WaitDMA0
+                    lbcs      ReadError
+                    lbsr      WaitMiniFDC
+                    lbcs      ReadError
                     bita      #FM11_MFDC_ERRMASK
                     bne       ReadError
                     clrb
@@ -207,12 +205,10 @@ Read2HD             ldx       V.LocalBuf,u
                     lda       #FM11_FDC_READSEC
                     sta       >FM11_FDC_CMD
 
-                    lda       >FM11_DMA1_MODE
-                    bita      #FM11_DMA_ERROR
-                    bne       ReadError
-                    bita      #FM11_DMA_DONE
-                    beq       ReadError
-                    lda       >FM11_FDC_STATUS
+                    lbsr      WaitDMA1
+                    lbcs      ReadError
+                    lbsr      WaitStdFDC
+                    lbcs      ReadError
                     bita      #FM11_FDC_ERRMASK
                     bne       ReadError
                     clrb
@@ -243,12 +239,10 @@ Write2D             ldx       V.LocalBuf,u
                     lda       #FM11_MFDC_WRITESEC
                     sta       >FM11_MFDC_CMD
 
-                    lda       >FM11_DMA0_MODE
-                    bita      #FM11_DMA_ERROR
-                    lbne      WriteError
-                    bita      #FM11_DMA_DONE
-                    lbeq      WriteError
-                    lda       >FM11_MFDC_STATUS
+                    lbsr      WaitDMA0
+                    lbcs      WriteError
+                    lbsr      WaitMiniFDC
+                    lbcs      WriteError
                     bita      #FM11_MFDC_ERRMASK
                     lbne      WriteError
                     clrb
@@ -267,12 +261,10 @@ Write2HD            ldx       V.LocalBuf,u
                     lda       #FM11_FDC_WRITESEC
                     sta       >FM11_FDC_CMD
 
-                    lda       >FM11_DMA1_MODE
-                    bita      #FM11_DMA_ERROR
-                    lbne      WriteError
-                    bita      #FM11_DMA_DONE
-                    lbeq      WriteError
-                    lda       >FM11_FDC_STATUS
+                    lbsr      WaitDMA1
+                    lbcs      WriteError
+                    lbsr      WaitStdFDC
+                    lbcs      WriteError
                     bita      #FM11_FDC_ERRMASK
                     lbne      WriteError
                     clrb
@@ -294,12 +286,10 @@ Write2D256Diag      ldx       V.LocalBuf,u
                     sta       >FM11_DMA0_MODE
                     lda       #FM11_MFDC_WRITESEC
                     sta       >FM11_MFDC_CMD
-                    lda       >FM11_DMA0_MODE
-                    bita      #FM11_DMA_ERROR
-                    bne       W2D_DMAErr
-                    bita      #FM11_DMA_DONE
-                    beq       W2D_DMANotDone
-                    lda       >FM11_MFDC_STATUS
+                    lbsr      WaitDMA0
+                    lbcs      W2D_DMANotDone
+                    lbsr      WaitMiniFDC
+                    lbcs      W2D_FDCErr
                     bita      #FM11_MFDC_ERRMASK
                     bne       W2D_FDCErr
                     clrb
@@ -327,12 +317,10 @@ Write2HD128         ldx       V.LocalBuf,u
                     sta       >FM11_DMA1_MODE
                     lda       #FM11_FDC_WRITESEC
                     sta       >FM11_FDC_CMD
-                    lda       >FM11_DMA1_MODE
-                    bita      #FM11_DMA_ERROR
-                    bne       W128_DMAErr
-                    bita      #FM11_DMA_DONE
-                    beq       W128_DMANotDone
-                    lda       >FM11_FDC_STATUS
+                    lbsr      WaitDMA1
+                    lbcs      W128_DMANotDone
+                    lbsr      WaitStdFDC
+                    lbcs      W128_FDCErr
                     bita      #FM11_FDC_ERRMASK
                     bne       W128_FDCErr
                     clrb
@@ -609,10 +597,10 @@ LWT_2D              ldx       PD.RGS,y
                     sta       >FM11_DMA0_MODE
                     lda       #FM11_MFDC_WRITETRK
                     sta       >FM11_MFDC_CMD
-                    lda       >FM11_DMA0_MODE
-                    bita      #FM11_DMA_ERROR
-                    lbne       LWT_Error
-                    lda       >FM11_MFDC_STATUS
+                    lbsr      WaitDMA0
+                    lbcs      LWT_Error
+                    lbsr      WaitMiniFDC
+                    lbcs      LWT_Error
                     bita      #FM11_MFDC_ERRMASK
                     lbne       LWT_Error
                     lbra      ss_ok
@@ -640,10 +628,10 @@ LWT_2HD             cmpa      #4
                     sta       >FM11_DMA1_MODE
                     lda       #FM11_FDC_WRITETRK
                     sta       >FM11_FDC_CMD
-                    lda       >FM11_DMA1_MODE
-                    bita      #FM11_DMA_ERROR
-                    bne       LWT_Error
-                    lda       >FM11_FDC_STATUS
+                    lbsr      WaitDMA1
+                    lbcs      LWT_Error
+                    lbsr      WaitStdFDC
+                    lbcs      LWT_Error
                     bita      #FM11_FDC_ERRMASK
                     bne       LWT_Error
                     lbra      ss_ok
@@ -727,6 +715,14 @@ Type1Delay          decb
                     orcc      #Carry
 Type1Done           rts
 
+WaitMiniFDC         pshs      y
+                    ldy       #FM11_MFDC_CMD
+                    bsr       WaitFDC
+                    puls      y,pc
+WaitStdFDC          pshs      y
+                    ldy       #FM11_FDC_CMD
+                    bsr       WaitFDC
+                    puls      y,pc
 WaitFDC             pshs      x,b
                     ldb       #8
 WaitFDCOuter        ldx       #0
@@ -751,6 +747,26 @@ InvalidateCylinder  pshs      d,x,cc
                     sta       b,x
 InvDone             puls      d,x,cc,pc
 
+
+
+WaitDMA0            pshs      x
+                    ldx       #FM11_DMA0_MODE
+                    bra       WaitDMA
+WaitDMA1            pshs      x
+                    ldx       #FM11_DMA1_MODE
+WaitDMA             pshs      y
+                    ldy       #0
+WaitDMALoop         lda       ,x
+                    bita      #FM11_DMA_ERROR
+                    bne       WaitDMAFail
+                    bita      #FM11_DMA_DONE
+                    bne       WaitDMADone
+                    leay      -1,y
+                    bne       WaitDMALoop
+WaitDMAFail         orcc      #Carry
+                    puls      y,x,pc
+WaitDMADone         andcc     #^Carry
+                    puls      y,x,pc
 
                     emod
 eom                 equ       *
