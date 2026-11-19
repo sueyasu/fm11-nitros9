@@ -581,13 +581,13 @@ FMCobWriteIPL       ldy       #1024
                     cmpd      #77
                     bne       FMCobWholeBoot
                     leax      >FMFileBuf,u
-                    ldy       #$010A              S1, 10 sectors
+                    ldy       #$010B              S1, 11 sectors
                     lda       <devpath
                     ldb       #SS.FM11BootPart
                     os9       I$SetStt
                     lbcs      WriteBad
-                    leax      >FMFileBuf+$0A00,u
-                    ldy       #$0B07              S11, 7 sectors
+                    leax      >FMFileBuf+$0B00,u
+                    ldy       #$0C06              S12, 6 sectors
                     lda       <devpath
                     ldb       #SS.FM11BootPart
                     os9       I$SetStt
