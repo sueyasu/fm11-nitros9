@@ -33,6 +33,7 @@ bootsize            rmb       2
 LSN0Ptr             rmb       2
 ddtks               rmb       1
 ddfmt               rmb       1
+CurCylinder         rmb       1                   $FF = unknown physical position
 size                equ       .
 
 name                fcs       /Boot/
@@ -40,11 +41,14 @@ name                fcs       /Boot/
 
 LSN24BIT            equ       0
 FLOPPY              equ       1
+FM11BootSeek        equ       1                   check all HWRead failures
 
 HWInit              lda       >FM11_DMA1_MODE
                     anda      #^FM11_DMA_ENABLE
                     sta       >FM11_DMA1_MODE
                     clr       >FM11_FDC_DRIVE
+                    lda       #$FF
+                    sta       CurCylinder,u
                     clrb
                     andcc     #^Carry
                     rts
@@ -68,7 +72,8 @@ HWCalcCyl           cmpx      #SectorsPerCyl
                     leax      -SectorsPerCyl,x
                     inca
                     bra       HWCalcCyl
-HWGotCyl            sta       >FM11_FDC_TRACK
+HWGotCyl            lbsr      HWSeek
+                    bcs       HWReadError
                     cmpx      #SectorsPerSide
                     blo       HWSide0
                     leax      -SectorsPerSide,x
@@ -91,7 +96,8 @@ HWGotSide           stb       >FM11_FDC_SIDE
 
                     bsr       DMA1Wait
                     bcs       HWReadError
-                    lda       >FM11_FDC_STATUS
+                    lbsr      HWWaitFDC
+                    bcs       HWReadError
                     bita      #FM11_FDC_ERRMASK
                     bne       HWReadError
 
@@ -100,7 +106,10 @@ HWGotSide           stb       >FM11_FDC_SIDE
                     andcc     #^Carry
                     rts
 
-HWReadError         orcc      #Carry
+HWReadError         lda       #$FF
+                    sta       CurCylinder,u
+                    clr       >FM11_DMA1_MODE
+                    orcc      #Carry
                     ldb       #E$Read
                     rts
 
@@ -155,6 +164,69 @@ DMA1WaitDone        andcc     #^Carry
 
 HWSectorError       orcc      #Carry
                     ldb       #E$Sect
+                    rts
+
+
+********************************************************************
+* HWSeek - A = target cylinder; preserve X (sector within cylinder)
+* and U/Y (boot_common ABI).  First access establishes track zero
+* physically; subsequent accesses seek only when the cylinder changes.
+* Verify is deliberately disabled ($0B/$1B).
+********************************************************************
+HWSeek              pshs      a,x
+                    clr       >FM11_DMA1_MODE
+                    clr       >FM11_FDC_DRIVE
+                    bsr       HWWaitFDC
+                    bcs       HWSeekFail
+                    lda       CurCylinder,u
+                    bpl       HWSeekKnown
+                    lda       #FM11_FDC_RESTORE_NOVERIFY
+                    bsr       HWType1
+                    bcs       HWSeekFail
+                    clra
+                    sta       CurCylinder,u
+HWSeekKnown         sta       >FM11_FDC_TRACK
+                    cmpa      ,s
+                    beq       HWSeekDone
+                    lda       ,s
+                    sta       >FM11_FDC_DATA
+                    lda       #FM11_FDC_SEEK
+                    bsr       HWType1
+                    bcs       HWSeekFail
+                    lda       ,s
+                    sta       CurCylinder,u
+HWSeekDone          andcc     #^Carry
+                    puls      a,x,pc
+HWSeekFail          orcc      #Carry
+                    puls      a,x,pc
+
+* Type I operations do not use DMA. Allow BUSY to assert, then wait
+* for completion before inspecting Type I status.
+HWType1             sta       >FM11_FDC_CMD
+                    ldb       #16
+HWType1Delay        decb
+                    bne       HWType1Delay
+                    bsr       HWWaitFDC
+                    bcs       HWType1Done
+                    bita      #FM11_FDC_TYPE1ERR
+                    beq       HWType1Done
+                    orcc      #Carry
+HWType1Done         rts
+
+* Bounded BUSY wait, including worst-case full-stroke seeks.
+* Return A = final status, carry set only on timeout.
+HWWaitFDC           ldb       #8
+HWWaitOuter         ldx       #0
+HWWaitBusy          lda       >FM11_FDC_STATUS
+                    bita      #FM11_FDC_BUSY
+                    beq       HWWaitDone
+                    leax      -1,x
+                    bne       HWWaitBusy
+                    decb
+                    bne       HWWaitOuter
+                    orcc      #Carry
+                    rts
+HWWaitDone          andcc     #^Carry
                     rts
 
 Address             fdb       FM11_FDC_CMD

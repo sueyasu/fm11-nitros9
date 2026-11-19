@@ -131,6 +131,9 @@ error
 FragBoot            ldb       DD.BT,x             MSB fd sector location
                     ldx       DD.BT+1,x           LSW fd sector location
                     lbsr      HWRead              get fd sector
+                    ifdef     FM11BootSeek
+                    lbcs      error
+                    endc
                     ldd       FD.SIZ+2,x          get file size (we skip first two bytes)
                     std       bootsize,u
                     leax      FD.SEG,x            point to segment table
@@ -161,6 +164,9 @@ BL2                 ldx       FDSL.A+1,x          LSW sector location
                     endc
                     beq       Back2Krn
 BL3                 lbsr      HWRead
+                    ifdef     FM11BootSeek
+                    lbcs      error
+                    endc
                     inc       blockloc,u          point to next input sector in mem
 
                     ifgt      Level-1
