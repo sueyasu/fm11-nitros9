@@ -333,9 +333,9 @@ L0162               sta       ,x+                 Append boot name to dev name e
                     lbcs      Bye                 Error : exit
                     lbsr      FShift              get divisor from DD.BIT R.G.
                     sty       btshift,u
-* Request memory for the FAT buffer + 256 bytes for stack space R.G.
+* Diagnostic: request 1024 bytes of stack space instead of 256.
                     ldd       <DD.MAP
-                    addd      #size+256
+                    addd      #size+1024
                     os9       F$Mem
                     lbcs      NoMem
                     tfr       y,s
