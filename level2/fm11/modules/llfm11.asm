@@ -1239,7 +1239,7 @@ WaitStdFDC          pshs      y
                     bsr       WaitFDC
                     puls      y,pc
 WaitFDC             pshs      x,b
-                    ldb       #8
+                    ldb       #64
 WaitFDCOuter        ldx       #0
 WaitFDCBusy         lda       ,y
                     bita      #FM11_FDC_BUSY
