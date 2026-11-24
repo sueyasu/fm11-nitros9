@@ -215,7 +215,7 @@ HWType1Done         rts
 
 * Bounded BUSY wait, including worst-case full-stroke seeks.
 * Return A = final status, carry set only on timeout.
-HWWaitFDC           ldb       #64
+HWWaitFDC           ldb       #16
 HWWaitOuter         ldx       #0
 HWWaitBusy          lda       >FM11_FDC_STATUS
                     bita      #FM11_FDC_BUSY
