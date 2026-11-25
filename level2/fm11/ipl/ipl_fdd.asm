@@ -11,15 +11,18 @@
 FDC_CMD             equ       $FD18
 FDC_TRACK           equ       $FD19
 FDC_SECTOR          equ       $FD1A
-FDC_DATA            equ       $FD1B
 FDC_SIDE            equ       $FD1C
 FDC_DRIVE           equ       $FD1D
+DMA0_ADDR           equ       $FD40
+DMA0_COUNT          equ       $FD42
 DMA0_MODE           equ       $FD50
+DMA0_BANK           equ       $FD94
 
 FDC_READSEC         equ       $80
-FDC_DRQ             equ       $02
-FDC_ERRMASK         equ       $90
-DMA_ENABLE          equ       $04
+FDC_ERRMASK         equ       $9C
+DMA_READ_MODE       equ       $04
+DMA_ERROR           equ       $40
+DMA_COMPLETE        equ       $80
 
 BOOT_DEST           equ       $E100
 BOOT_ENTRY          equ       $E102
@@ -32,9 +35,10 @@ main                orcc      #$50
                     lds       #$2500
                     clr       >FDC_DRIVE
 
-                    lda       >DMA0_MODE
-                    anda      #^DMA_ENABLE
-                    sta       >DMA0_MODE
+* Bank 0 is identity-mapped before the boot image enables the MMU.
+* Transfer directly into the final boottrack address via HD6844.
+                    clr       >DMA0_MODE
+                    clr       >DMA0_BANK
 
                     clr       >FDC_TRACK
                     clr       >FDC_SIDE
@@ -59,37 +63,39 @@ chs_done            leay      -1,y
                     bne       next_sector
                     jmp       BOOT_ENTRY
 
-read_sector         lda       #FDC_READSEC
+* Program one physical 256-byte sector, then wait for HD6844
+* terminal count. Checking only the FDC interrupt is insufficient:
+* the DMA must have delivered every byte before the boot proceeds.
+read_sector         clr       >DMA0_MODE
+                    stx       >DMA0_ADDR
+                    ldd       #256
+                    std       >DMA0_COUNT
+                    lda       #DMA_READ_MODE
+                    sta       >DMA0_MODE
+                    lda       #FDC_READSEC
                     sta       >FDC_CMD
-                    ldu       #256
-read_byte           pshs      u
-                    ldu       #0
-wait_drq            lda       >FDC_CMD
-                    bita      #FDC_ERRMASK
-                    bne       read_fail_saved
-                    bita      #FDC_DRQ
-                    bne       have_byte
-                    leau      -1,u
-                    cmpu      #0
-                    bne       wait_drq
-                    puls      u
-                    orcc      #$01
-                    rts
-read_fail_saved     puls      u
-                    orcc      #$01
-                    rts
-have_byte           lda       >FDC_DATA
-                    sta       ,x+
-                    puls      u
-                    leau      -1,u
-                    cmpu      #0
-                    bne       read_byte
+                    ldu       #$FFFF
+dma_wait            lda       >DMA0_MODE
+                    bita      #DMA_ERROR
+                    bne       read_fail
+                    bita      #DMA_COMPLETE
+                    bne       dma_done
                     lda       >FDC_CMD
                     bita      #FDC_ERRMASK
                     bne       read_fail
+                    leau      -1,u
+                    cmpu      #0
+                    bne       dma_wait
+                    bra       read_fail
+dma_done            clr       >DMA0_MODE
+                    lda       >FDC_CMD
+                    bita      #FDC_ERRMASK
+                    bne       read_fail
+                    leax      256,x
                     andcc     #$FE
                     rts
-read_fail           orcc      #$01
+read_fail           clr       >DMA0_MODE
+                    orcc      #$01
                     rts
 boot_error          bra       boot_error
 
