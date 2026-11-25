@@ -15,19 +15,16 @@ FM11_FDC_TRACK      equ       $FD31
 FM11_FDC_SECTOR     equ       $FD32
 FM11_FDC_SIDE       equ       $FD34
 FM11_FDC_DRIVE      equ       $FD35
-FM11_FDC_IRQ        equ       $FD37
 FM11_DMA1_ADDR      equ       $FD44
 FM11_DMA1_COUNT     equ       $FD46
 FM11_DMA1_MODE      equ       $FD51
 FM11_DMA1_BANK      equ       $FD95
 
 FDC_READSEC         equ       $80
-FDC_ERRMASK         equ       $9C   * not ready/RNF/CRC/lost data
-FDC_DONE            equ       $40
-DMA_ENABLE          equ       $04
-DMA_DONE            equ       $80
-DMA_BOUNCE          equ       $0600
-SECTOR_BYTES        equ       256
+FDC_ERRMASK         equ       $9C
+DMA_READ_MODE       equ       $04
+DMA_ERROR           equ       $40
+DMA_COMPLETE        equ       $80
 
 BOOT_DEST           equ       $E100
 BOOT_ENTRY          equ       $E102
@@ -41,9 +38,8 @@ main                orcc      #$50
                     clr       >FM11_FDC_DRIVE
 
 * The 2HD MFM data track runs at 500 kb/s (16 us/byte).
-* The 6809 cannot sustain that rate with the old stack-heavy PIO
-* polling loop. Use HD6844 DMA to a low-memory bounce buffer, then
-* copy the sector to its final high-memory boottrack destination.
+* The boot IPL uses HD6844 DMA to transfer into the final physical
+* boottrack address. Bank 0 is identity-mapped before MMU setup.
                     clr       >FM11_DMA1_MODE
                     clr       >FM11_DMA1_BANK
 
@@ -62,43 +58,34 @@ next_sector         lbsr      read_sector
                     bne       next_sector
                     jmp       BOOT_ENTRY
 
+* Use HD6844 DMA terminal count rather than the FDC interrupt.
+* One physical sector is 256 bytes on the 2HD MFM boottrack.
 read_sector         clr       >FM11_DMA1_MODE
-                    ldd       #DMA_BOUNCE
-                    std       >FM11_DMA1_ADDR
-                    ldd       #SECTOR_BYTES
+                    stx       >FM11_DMA1_ADDR
+                    ldd       #256
                     std       >FM11_DMA1_COUNT
-                    lda       #DMA_ENABLE
+                    lda       #DMA_READ_MODE
                     sta       >FM11_DMA1_MODE
                     lda       #FDC_READSEC
                     sta       >FM11_FDC_CMD
-
-* The FDC signals completion through FD37 bit 6. Allow more than
-* one spindle revolution for the sector to arrive before timing out.
-                    ldu       #0
-wait_irq            lda       >FM11_FDC_IRQ
-                    bita      #FDC_DONE
-                    bne       irq_done
-                    leau      -1,u
-                    cmpu      #0
-                    bne       wait_irq
-                    bra       read_fail
-irq_done            lda       >FM11_FDC_CMD
+                    ldu       #$FFFF
+dma_wait            lda       >FM11_DMA1_MODE
+                    bita      #DMA_ERROR
+                    bne       read_fail
+                    bita      #DMA_COMPLETE
+                    bne       dma_done
+                    lda       >FM11_FDC_CMD
                     bita      #FDC_ERRMASK
                     bne       read_fail
-                    lda       >FM11_DMA1_MODE
-                    bita      #DMA_DONE
-                    beq       read_fail
-
-* DMA bank 0 is identity-mapped in the ROM IPL workspace. Copy
-* out after the FDC stops requesting bytes; the memory-to-memory
-* loop therefore does not need to meet any 16 us DRQ deadline.
-                    clr       >FM11_DMA1_MODE
-                    ldu       #DMA_BOUNCE
-                    clrb
-copy_sector         lda       ,u+
-                    sta       ,x+
-                    decb
-                    bne       copy_sector
+                    leau      -1,u
+                    cmpu      #0
+                    bne       dma_wait
+                    bra       read_fail
+dma_done            clr       >FM11_DMA1_MODE
+                    lda       >FM11_FDC_CMD
+                    bita      #FDC_ERRMASK
+                    bne       read_fail
+                    leax      256,x
                     andcc     #$FE
                     rts
 read_fail           clr       >FM11_DMA1_MODE
