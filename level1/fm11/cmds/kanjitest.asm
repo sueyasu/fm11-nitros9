@@ -39,8 +39,13 @@ start               leax      Header,pcr
                     lda       #SUB_SJIS
                     clrb
                     lbsr      Cmd
+                    bcs       RestoreFail
                     puls      cc
                     bcs       Fail
+                    bra       Restored
+RestoreFail         leas      1,s
+                    bra       Fail
+Restored
                     leax      Footer,pcr
                     ldy       #FooterEnd-Footer
                     lbsr      Put
@@ -79,9 +84,11 @@ CmdHaltWait         lda       >SUB_PORT
                     bra       CmdFail
 CmdInstall          clr       >SUB_SHARED
                     clr       >SUB_SHARED+1
-                    lda       3,s
+* PSHS A,B,X stores A at 0,S and B at 1,S;
+* 2,S and 3,S are the saved X, not command parameters.
+                    lda       0,s
                     sta       >SUB_SHARED+2
-                    lda       2,s
+                    lda       1,s
                     sta       >SUB_SHARED+3
                     clr       >SUB_SHARED+4
                     clr       >SUB_PORT
