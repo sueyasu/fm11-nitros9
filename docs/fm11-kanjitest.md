@@ -11,10 +11,13 @@ Requires the later 20-KiB FM-11AD2/BS-family sub-ROM and both
 128-KiB Kanji ROMs. The first-level sample contains six characters;
 the second-level sample contains JIS78 48-ku, 1-5-ten.
 
-Build an extended Level 1 image:
+Build the Level 1 **2HD** image (the diagnostic is included in the extended command set):
 ```sh
-scripts/fm11/build-images.sh 1 6809 2d
+scripts/fm11/build-images.sh 1 6809 2hd
 ```
+On a 2D image, space constraints may select the core commands only;
+in that case copy the compiled `build/.../kanjitest` OS-9 module
+into `/D0/CMDS` manually or use the 2HD image.
 Then at the LOCAL FM-11 console:
 ```
 OS9: kanjitest
