@@ -26,12 +26,20 @@ Run the emulator with `--trace-kanji` and confirm both the
 displayed glyphs and ROM-access counts. A serial /T1 console is
 not a substitute for the local CRT.
 
-Note: The actual $37 mode argument is provisionally supplied
-as 1 for enable and 0 for disable at $FC83. The command's
-parameter format has not yet been execution-verified against the
-specific stock sub-ROM in use. If it does not display Kanji,
-the $37 handler must be traced and the argument format corrected.
-Assembly/CTest success alone does not prove correct glyph display.
+The command $37 parameter was verified against the provided original
+20-KiB SubRom.h machine code. The dispatcher sends $37 to the handler
+at $EAF4. That handler tests the byte at $9F83 and sets the Shift-JIS
+mode flag (direct RAM $9C, bit 7) on the $FF path. Setting $9F83
+to $01 instead *clears* that flag and causes byte pairs to be shown
+as single-byte characters; the Kanji ROM ports are never accessed.
+KanjiTest now sends $FF to enable and $00 to disable; the auxiliary
+parameter bytes at $9F84/$9F85 are cleared.
+
+The ROM handler logic has been statically analyzed, but glyph output
+through the running emulator and the specific supplied ROM still
+requires local verification. Confirm `--trace-kanji` increments when
+running KanjiTest; if not, inspect the actual sub-ROM's $37 handler
+and its text-mode configuration before introducing further guesses.
 
 ROM revision reference:
 https://haserin09.la.coocan.jp/fm1116rom.html
