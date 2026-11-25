@@ -94,6 +94,7 @@ CmdInstall          clr       >SUB_SHARED
                     lda       1,s
                     sta       >SUB_SHARED+3
                     clr       >SUB_SHARED+4
+                    clr       >SUB_SHARED+5
                     clr       >SUB_PORT
                     ldx       #TIMEOUT
 CmdWait             lda       >SUB_PORT
