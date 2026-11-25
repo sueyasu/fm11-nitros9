@@ -20,6 +20,9 @@ name                fcs       /KanjiTest/
 
 SUB_PORT            equ       $FD05
 SUB_SHARED          equ       $FC80
+* Main-side graphics display gate (text remains enabled).
+DISPLAY_CTRL        equ       $FDA0
+DISPLAY_BOTH        equ       $0D
 SUB_CHAR            equ       $12
 SUB_SJIS            equ       $37
 TIMEOUT             equ       $FFFF
@@ -28,6 +31,11 @@ start               leax      Header,pcr
                     ldy       #HeaderEnd-Header
                     lbsr      Put
                     bcs       Fail
+* Firmware uses graphics VRAM for Kanji. A text-only FDA0 setting
+* masks that VRAM at SDL scanout even when AFF4-7 reads succeed.
+* Enable both graphics ($0C) and text ($01) before printing.
+                    lda       #DISPLAY_BOTH
+                    sta       >DISPLAY_CTRL
 * Stock enhanced sub-ROM $37 at EAF4: FC83=$FF enables the
 * Shift-JIS interpretation flag (direct RAM $9C, bit 7).  $01
 * instead CLEARS it, so the byte pairs are displayed as ANK.
