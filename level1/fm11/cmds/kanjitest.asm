@@ -28,9 +28,12 @@ start               leax      Header,pcr
                     ldy       #HeaderEnd-Header
                     lbsr      Put
                     bcs       Fail
-* Later FM-11AD2/BS ROM: enable Shift-JIS character mode.
+* Stock enhanced sub-ROM $37 at EAF4: FC83=$FF enables the
+* Shift-JIS interpretation flag (direct RAM $9C, bit 7).  $01
+* instead CLEARS it, so the byte pairs are displayed as ANK.
+* FC84/FC85 are both initialized to zero by Cmd.
                     lda       #SUB_SJIS
-                    ldb       #1
+                    ldb       #$FF
                     lbsr      Cmd
                     bcs       Fail
                     leax      Samples,pcr
