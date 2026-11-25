@@ -43,3 +43,24 @@ and its text-mode configuration before introducing further guesses.
 
 ROM revision reference:
 https://haserin09.la.coocan.jp/fm1116rom.html
+
+## Graphics output gate ($FDA0)
+
+The first runtime test with command $37 enable=$FF yielded **11 Kanji
+selections** (six level-1 plus five level-2 glyphs), but no visible glyph
+pixels. The FM-11 main-side $FDA0 register controls whether the graphics
+VRAM plane is visible: graphics bits are $0C, text bits are $03.
+The original NitrOS-9 local console is a text-only driver and does not
+explicitly enable main-side graphics output.
+
+KanjiTest now writes **$0D to $FDA0** before sending $37/$12: graphics
+and the ordinary text overlay remain enabled. This is a diagnostic
+display-mode change, not an emulated glyph overlay; the stock sub-ROM
+still fetches and rasterizes the character. The test leaves both
+layers enabled on return. A display reset restores normal firmware
+defaults.
+
+If glyphs remain invisible, use the SDL software renderer with
+`--trace-kanji --diagnostics` and record **leftReads/rightReads**,
+**VRAM_nonzero**, and **FDA0** while KanjiTest is running. This
+distinguishes glyph ROM reads, VRAM writes, and visibility gating.
