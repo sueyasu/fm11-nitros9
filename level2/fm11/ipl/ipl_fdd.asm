@@ -3,7 +3,7 @@
 *
 * The FM-11 ROM loads T0/H0/S1-S2 (512 bytes) at $0400 and jumps to
 * $0400.  S3-S4 remain reserved.  The Level 2 kernel track begins at S5
-* and is loaded directly at $E000.
+* and is loaded directly at $E100.
 ********************************************************************
 
                     org       $0400
