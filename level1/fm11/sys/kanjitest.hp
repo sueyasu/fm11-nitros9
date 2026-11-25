@@ -1,0 +1,4 @@
+@KANJITEST
+Syntax: KanjiTest
+Purpose: test JIS level 1/2 via stock FM-11 enhanced sub-ROM $37 and $12 commands.
+Requires local console, enhanced display ROM, and Kanji ROMs.

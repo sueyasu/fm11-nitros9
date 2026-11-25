@@ -1,0 +1,120 @@
+********************************************************************
+* KanjiTest - enhanced FM-11 stock sub-ROM Kanji display test
+* Uses shared command mailbox; never accesses Kanji ROM or VRAM.
+********************************************************************
+                    nam       KanjiTest
+                    ttl       FM-11 JIS level 1/2 stock-ROM test
+                    ifp1
+                    use       defsfile
+                    endc
+tylg                set       Prgrm+Objct
+rev                 set       0
+atrv                set       ReEnt+rev
+edition             set       1
+                    mod       eom,name,tylg,atrv,start,size
+                    org       0
+                    rmb       32
+size                equ       .
+name                fcs       /KanjiTest/
+                    fcb       edition
+
+SUB_PORT            equ       $FD05
+SUB_SHARED          equ       $FC80
+SUB_CHAR            equ       $12
+SUB_SJIS            equ       $37
+TIMEOUT             equ       $FFFF
+
+start               leax      Header,pcr
+                    ldy       #HeaderEnd-Header
+                    lbsr      Put
+                    bcs       Fail
+* Later FM-11AD2/BS ROM: enable Shift-JIS character mode.
+                    lda       #SUB_SJIS
+                    ldb       #1
+                    lbsr      Cmd
+                    bcs       Fail
+                    leax      Samples,pcr
+                    lbsr      Stream
+                    pshs      cc
+                    lda       #SUB_SJIS
+                    clrb
+                    lbsr      Cmd
+                    puls      cc
+                    bcs       Fail
+                    leax      Footer,pcr
+                    ldy       #FooterEnd-Footer
+                    lbsr      Put
+                    bcs       Fail
+                    clrb
+Exit                os9       F$Exit
+Fail                ldb       #1
+                    bra       Exit
+
+* Zero-terminated Shift-JIS stream, including ASCII labels.
+Stream              ldb       ,x+
+                    beq       StreamEnd
+                    lda       #SUB_CHAR
+                    lbsr      Cmd
+                    bcs       StreamEnd
+                    bra       Stream
+StreamEnd           rts
+
+* A command, B first argument. Preserve A/B/X.
+* Protocol follows fm11console.asm ScreenPutC.
+Cmd                 pshs      a,b,x
+                    ldx       #TIMEOUT
+CmdReady            lda       >SUB_PORT
+                    bpl       CmdHalt
+                    leax      -1,x
+                    bne       CmdReady
+                    bra       CmdFail
+CmdHalt             lda       #$80
+                    sta       >SUB_PORT
+                    ldx       #TIMEOUT
+CmdHaltWait         lda       >SUB_PORT
+                    bmi       CmdInstall
+                    leax      -1,x
+                    bne       CmdHaltWait
+                    clr       >SUB_PORT
+                    bra       CmdFail
+CmdInstall          clr       >SUB_SHARED
+                    clr       >SUB_SHARED+1
+                    lda       3,s
+                    sta       >SUB_SHARED+2
+                    lda       2,s
+                    sta       >SUB_SHARED+3
+                    clr       >SUB_SHARED+4
+                    clr       >SUB_PORT
+                    ldx       #TIMEOUT
+CmdWait             lda       >SUB_PORT
+                    bpl       CmdOK
+                    leax      -1,x
+                    bne       CmdWait
+CmdFail             orcc      #Carry
+                    puls      a,b,x,pc
+CmdOK               andcc     #^Carry
+                    puls      a,b,x,pc
+
+Put                 lda       #1
+                    os9       I$Write
+                    rts
+
+Header              fcc       /FM-11 stock sub-ROM Kanji test (JIS 1 and 2)/
+                    fcb       C$CR,C$LF
+HeaderEnd           equ       *
+
+* Level 1: Kan/Ji/Ni/Hon/Go/A. Level 2: JIS78 48-1..48-5.
+* Raw Shift-JIS bytes, not UTF-8 or graphics/ROM addresses.
+Samples             fcc       /Level 1: /
+                    fcb       $8A,$BF,$8E,$9A,$93,$FA,$96,$7B
+                    fcb       $8C,$EA,$88,$9F,$0D,$0A
+                    fcc       /Level 2: /
+                    fcb       $98,$9F,$98,$A0,$98,$A1,$98,$A2,$98,$A3
+                    fcb       $0D,$0A,0
+
+Footer              fcc       /Done. Check on-screen glyphs and --trace-kanji./
+                    fcb       C$CR,C$LF
+FooterEnd           equ       *
+                    emod
+eom                 equ       *
+                    end

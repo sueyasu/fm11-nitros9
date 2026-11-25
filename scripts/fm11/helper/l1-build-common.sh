@@ -291,6 +291,8 @@ cp "$FM/cmds/more.asm"    "$OUT/more.asm"
     # FM-11-specific diagnostic command for v30 ANSI attribute bring-up.
     cp "$FM/cmds/contest.asm" "$OUT/contest.asm"
     $AS_COMMON --output="$OUT/contest" contest.asm
+    cp "$FM/cmds/kanjitest.asm" "$OUT/kanjitest.asm"
+    $AS_COMMON --output="$OUT/kanjitest" kanjitest.asm
 
     # FM-11 MMR/MMU Level 1 diagnostic used for Level 2 bring-up.
     cp "$FM/cmds/mmutest.asm" "$OUT/mmutest.asm"
